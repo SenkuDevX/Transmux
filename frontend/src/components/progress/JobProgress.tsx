@@ -5,17 +5,22 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Download, CheckCircle, XCircle, Clock, Loader2 } from 'lucide-react';
 import { useAppStore } from '@/lib/store';
 import { getDownloadUrl } from '@/lib/api';
-import type { ConversionJob, JobStatus } from '@transmux/shared';
+import type { ActiveJob, ConversionStatus } from '@/lib/api';
 
-const STATUS: Record<JobStatus, { label: string; dot: string; ring: string }> = {
-  queued:     { label: 'Queued',     dot: 'bg-amber-400',  ring: 'border-amber-500/20 text-amber-400'  },
-  processing: { label: 'Converting', dot: 'bg-accent-2',   ring: 'border-accent/20 text-accent-2'      },
-  done:       { label: 'Done',       dot: 'bg-green-400',  ring: 'border-green-500/20 text-green-400'  },
-  failed:     { label: 'Failed',     dot: 'bg-red-400',    ring: 'border-red-500/20 text-red-400'      },
+type JobStatus = ConversionStatus;
+
+const STATUS: Record<ConversionStatus, { label: string; dot: string; ring: string }> = {
+  queued: { label: 'Queued', dot: 'bg-amber-400', ring: 'border-amber-500/20 text-amber-400' },
+  downloading: { label: 'Downloading', dot: 'bg-blue-400', ring: 'border-blue-500/20 text-blue-400' },
+  converting: { label: 'Converting', dot: 'bg-accent-2', ring: 'border-accent/20 text-accent-2' },
+  uploading: { label: 'Uploading', dot: 'bg-purple-400', ring: 'border-purple-500/20 text-purple-400' },
+  completed: { label: 'Done', dot: 'bg-green-400', ring: 'border-green-500/20 text-green-400' },
+  failed: { label: 'Failed', dot: 'bg-red-400', ring: 'border-red-500/20 text-red-400' },
+  expired: { label: 'Expired', dot: 'bg-gray-400', ring: 'border-gray-500/20 text-gray-400' },
 };
 
 export default function JobProgress() {
-  const { jobs, updateJob } = useAppStore();
+  const { activeJobs: jobs, updateJob } = useAppStore();
   const wsRef = useRef<WebSocket | null>(null);
   const activeCount = jobs.filter(j => j.status === 'queued' || j.status === 'processing').length;
 

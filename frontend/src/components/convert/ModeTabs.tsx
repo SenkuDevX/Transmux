@@ -2,7 +2,8 @@
 
 import { motion } from 'framer-motion';
 import { useAppStore } from '@/lib/store';
-import type { ConversionMode } from '@transmux/shared';
+
+type ConversionMode = 'audio' | 'video' | 'subtitle';
 
 const tabs: { id: ConversionMode; label: string; icon: string }[] = [
   { id: 'audio', label: 'Audio', icon: '🎵' },

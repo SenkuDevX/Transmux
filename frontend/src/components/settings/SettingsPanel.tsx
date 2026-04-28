@@ -3,7 +3,9 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, ArrowRight } from 'lucide-react';
 import { useAppStore } from '@/lib/store';
-import type { ConversionMode, OutputFormat } from '@transmux/shared';
+
+type ConversionMode = 'audio' | 'video' | 'subtitle' | 'image';
+type OutputFormat = 'mp3' | 'wav' | 'ogg' | 'm4a' | 'aac' | 'flac' | 'opus' | 'mp4' | 'mkv' | 'webm' | 'mov' | 'avi' | 'flv' | 'srt' | 'vtt' | 'ass' | 'sub';
 
 // ── Format lists ──────────────────────────────────────────────────────────────
 const FORMATS: Record<ConversionMode, OutputFormat[]> = {
