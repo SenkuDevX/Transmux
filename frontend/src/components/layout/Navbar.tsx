@@ -2,7 +2,8 @@
 
 import { motion } from 'framer-motion';
 import { Zap, Sun, Moon } from 'lucide-react';
-import type { AppTab } from '@/app/page';
+
+type AppTab = 'convert' | 'history' | 'about';
 import { useTheme } from './ThemeProvider';
 
 interface NavbarProps {
