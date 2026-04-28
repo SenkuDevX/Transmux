@@ -1,7 +1,7 @@
 import { v4 as uuid } from 'uuid';
 import path from 'path';
 import fs from 'fs';
-import type { ConversionJob, JobStatus } from '../types';
+import type { ConversionJob, JobStatus, ConversionMode } from '../types';
 import { logger, logJobComplete, logJobFailed, logJobProgress } from '../utils/logger';
 import { TEMP_DIR, FILE_EXPIRY_HOURS } from '../utils/constants';
 import { downloadUrl, sanitiseTitle } from './ytdlp';

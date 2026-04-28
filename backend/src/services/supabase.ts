@@ -1,15 +1,18 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import type { JobStatus } from '../types';
+import type { JobStatus, ConversionMode } from '../types';
 
 interface ConversionJob {
   id: string;
   status: JobStatus;
+  mode: ConversionMode;
   sourceUrl?: string;
   inputName: string;
   inputSize: number;
   outputFormat: string;
   options: any;
   progress: number;
+  outputName?: string;
+  outputSize?: number;
   downloadUrl?: string;
   cloudinaryPublicId?: string;
   error?: string;

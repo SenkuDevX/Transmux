@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "ES2022",
     "module": "CommonJS",
-    "moduleResolution": "bundler",
+    "moduleResolution": "node",
     "lib": ["ES2022"],
     "outDir": "./dist",
     "rootDir": "./src",
@@ -14,7 +14,6 @@
     "resolveJsonModule": true,
     "declaration": false,
     "sourceMap": true,
-    "ignoreDeprecations": "6.0",
     "allowJs": true
   },
   "include": ["src/**/*"],
