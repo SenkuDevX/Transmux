@@ -69,6 +69,9 @@ transmux/
    - `UPSTASH_REDIS_HOST`
    - `UPSTASH_REDIS_PORT`
    - `UPSTASH_REDIS_PASSWORD`
+   UPSTASH_REDIS_HOST=fluent-hound-80070.upstash.io
+UPSTASH_REDIS_PORT=6379
+UPSTASH_REDIS_PASSWORD=gQAAAAAAATjGAAIgcDIyYjFjNTk3NThjY2E0MzQ0OWQ2OWQxODg5YzQyNGU3Nw
 
 ### Step 2: Configure Supabase
 
@@ -79,7 +82,9 @@ transmux/
    - `SUPABASE_URL`
    - `SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY`
-
+SUPABASE_URL=https://idxsbfhgerefspldonwb.supabase.co
+SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkeHNiZmhnZXJlZnNwbGRvbndiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczNDY1MDAsImV4cCI6MjA5MjkyMjUwMH0.sfpiCdUzHg-OcBv_l_zpjlW96XjCoxZc9tm9TbUuNp4
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkeHNiZmhnZXJlZnNwbGRvbndiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzM0NjUwMCwiZXhwIjoyMDkyOTIyNTAwfQ.2GW5Kg3VJr_dfT_cxyF_mtHK7Pm0D2oXWAI49vm_C_g
 ### Step 3: Configure Cloudinary
 
 1. Go to [cloudinary.com](https://cloudinary.com) and create a free account
