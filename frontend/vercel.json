@@ -1,0 +1,34 @@
+{
+  "framework": "nextjs",
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "installCommand": "npm install",
+  "regions": ["iad1"],
+  "headers": [
+    {
+      "source": "/api/:path*",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Credentials",
+          "value": "true"
+        },
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET,POST,DELETE,OPTIONS"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "Content-Type,Authorization"
+        }
+      ]
+    }
+  ],
+  "env": {
+    "NEXT_PUBLIC_API_URL": "@transmux-api-url",
+    "NEXT_PUBLIC_WS_URL": "@transmux-ws-url"
+  }
+}

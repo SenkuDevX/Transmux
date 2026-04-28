@@ -1,0 +1,36 @@
+# fly.toml — Transmux backend on Fly.io
+app = "transmux-backend"
+primary_region = "sea"
+
+[build]
+  dockerfile = "../Dockerfile"
+
+[env]
+  PORT = "3001"
+  NODE_ENV = "production"
+  FILE_CLEANUP_HOURS = "1"
+  MAX_FILE_SIZE_MB = "500"
+  TEMP_DIR = "/tmp/transmux"
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 3001
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+
+  [services.http_checks]
+    interval = "10s"
+    timeout = "2s"
+    grace_period = "5s"
+    method = "get"
+    path = "/api/health"
+
+[mounts]
+  source = "transmux_temp"
+  destination = "/tmp/transmux"

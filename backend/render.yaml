@@ -1,0 +1,60 @@
+services:
+  - type: web
+    name: transmux-backend
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: FRONTEND_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: UPSTASH_REDIS_HOST
+        sync: false
+      - key: UPSTASH_REDIS_PORT
+        sync: false
+      - key: UPSTASH_REDIS_PASSWORD
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: ADMIN_SECRET
+        sync: false
+      - key: TEMP_DIR
+        value: /tmp/transmux
+      - key: MAX_CONCURRENT_JOBS
+        value: 2
+      - key: JOB_TIMEOUT_MS
+        value: 1800000
+      - key: LOG_LEVEL
+        value: info
+
+  - type: cron
+    name: transmux-cleanup
+    schedule: "*/10 * * * *"
+    plan: free
+    command: curl -X POST https://transmux-backend.onrender.com/api/admin/cleanup -H "Authorization: Bearer $ADMIN_SECRET"
+    envVars:
+      - key: ADMIN_SECRET
+        sync: false
+
+metadata:
+  template:
+    name: transmux-backend
+    description: Media conversion API with FFmpeg and yt-dlp

@@ -1,0 +1,21 @@
+# Root package.json for Transmux monorepo
+
+{
+  "name": "transmux",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend",
+    "shared"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace=backend\" \"npm run dev --workspace=frontend\"",
+    "build": "npm run build --workspace=shared && npm run build --workspace=frontend && npm run build --workspace=backend",
+    "install:all": "npm install",
+    "clean": "rm -rf frontend/.next backend/dist shared/dist node_modules */node_modules"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

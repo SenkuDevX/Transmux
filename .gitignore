@@ -1,0 +1,13 @@
+node_modules/
+.next/
+dist/
+build/
+.env
+.env.local
+*.log
+temp/
+/tmp/transmux/
+.DS_Store
+Thumbs.db
+*.tsbuildinfo
+.vercel
