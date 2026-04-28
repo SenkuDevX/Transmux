@@ -1,246 +1,167 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { toast } from 'sonner';
-import UrlInput from '@/components/convert/UrlInput';
-import FormatSelector from '@/components/convert/FormatSelector';
-import QualitySelector from '@/components/convert/QualitySelector';
-import ConvertButton from '@/components/convert/ConvertButton';
-import JobCard from '@/components/jobs/JobCard';
-import Header from '@/components/layout/Header';
+import Navbar from '@/components/layout/Navbar';
 import Hero from '@/components/layout/Hero';
-import Footer from '@/components/layout/Footer';
-import { useAppStore, AUDIO_FORMATS, VIDEO_FORMATS, AUDIO_QUALITIES, VIDEO_QUALITIES } from '@/lib/store';
-import { createConversionJob, getJobStatus } from '@/lib/api';
-import { useJobsWebSocket } from '@/lib/socket';
-import type { ConversionStatus } from '@/lib/api';
+import ConvertPanel from '@/components/convert/ConvertPanel';
+import HistoryPanel from '@/components/history/HistoryPanel';
+
+export type AppTab = 'convert' | 'history' | 'about';
 
 export default function HomePage() {
-  const {
-    url, setUrl,
-    format, setFormat,
-    quality, setQuality,
-    mode, setMode,
-    activeJobs, addJob, updateJob,
-  } = useAppStore();
-
-  const [converting, setConverting] = useState(false);
-  const [inputError, setInputError] = useState('');
-
-  const handleWsEvent = (event: string, data: any) => {
-    switch (event) {
-      case 'progress':
-        updateJob(data.jobId, {
-          status: data.status as ConversionStatus,
-          progress: data.progress,
-        });
-        break;
-      case 'complete':
-        updateJob(data.jobId, {
-          status: 'completed',
-          progress: 100,
-          downloadUrl: data.downloadUrl,
-          expiresAt: data.expiresAt,
-        });
-        toast.success('Conversion complete! Click to download.');
-        break;
-      case 'failed':
-        updateJob(data.jobId, {
-          status: 'failed',
-          error: data.error,
-        });
-        toast.error(`Conversion failed: ${data.error}`);
-        break;
-      case 'expired':
-        updateJob(data.jobId, { status: 'expired' });
-        toast.warning('File has expired and was deleted.');
-        break;
-    }
-  };
-
-  useJobsWebSocket(handleWsEvent);
-
-  const validateUrl = (url: string): boolean => {
-    if (!url.trim()) {
-      setInputError('Please enter a URL');
-      return false;
-    }
-    try {
-      const parsed = new URL(url);
-      if (!['http:', 'https:'].includes(parsed.protocol)) {
-        setInputError('URL must use HTTP or HTTPS');
-        return false;
-      }
-      const allowed = ['youtube.com', 'youtu.be', 'vimeo.com', 'soundcloud.com', 'twitch.tv', 'dailymotion.com', 'bilibili.com'];
-      const isAllowed = allowed.some(d => parsed.hostname === d || parsed.hostname.endsWith(`.${d}`));
-      if (!isAllowed) {
-        setInputError('Only YouTube, Vimeo, SoundCloud, Twitch, Dailymotion, and Bilibili are supported');
-        return false;
-      }
-    } catch {
-      setInputError('Please enter a valid URL');
-      return false;
-    }
-    setInputError('');
-    return true;
-  };
-
-  const handleConvert = async () => {
-    if (!validateUrl(url)) return;
-
-    setConverting(true);
-    try {
-      const result = await createConversionJob({
-        url,
-        format,
-        quality,
-        mode,
-      });
-
-      addJob({
-        jobId: result.jobId,
-        status: 'queued',
-        progress: 0,
-        inputName: url.split('/').pop() || 'Media',
-        outputFormat: format,
-      });
-
-      toast.success('Conversion started!');
-
-      const pollStatus = async () => {
-        try {
-          const status = await getJobStatus(result.jobId);
-          updateJob(result.jobId, {
-            status: status.status as ConversionStatus,
-            progress: status.progress,
-            downloadUrl: status.downloadUrl,
-            expiresAt: status.expiresAt,
-          });
-
-          if (status.status === 'completed' || status.status === 'failed' || status.status === 'expired') {
-            if (status.status === 'completed') {
-              toast.success('Conversion complete!');
-            }
-            return;
-          }
-          setTimeout(pollStatus, 2000);
-        } catch {
-          setTimeout(pollStatus, 5000);
-        }
-      };
-
-      setTimeout(pollStatus, 1000);
-
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to start conversion');
-    } finally {
-      setConverting(false);
-    }
-  };
-
-  const formats = mode === 'audio' ? AUDIO_FORMATS : VIDEO_FORMATS;
-  const qualities = mode === 'audio' ? AUDIO_QUALITIES : VIDEO_QUALITIES;
+  const [tab, setTab] = useState<AppTab>('convert');
 
   return (
     <div className="relative min-h-screen overflow-x-hidden">
       <div className="noise-overlay" />
+      <div className="pointer-events-none fixed left-[-120px] top-[-180px] h-[560px] w-[560px] rounded-full bg-[radial-gradient(circle,rgba(59,124,244,0.1)_0%,transparent_70%)]" />
+      <div className="pointer-events-none fixed bottom-[-60px] right-[-100px] h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle,rgba(240,79,89,0.07)_0%,transparent_70%)]" />
 
-      <div className="relative z-10 mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
-        <Header />
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          <Hero />
-        </motion.div>
+      <div className="relative z-10 mx-auto max-w-5xl px-6 pb-24">
+        <Navbar activeTab={tab} onTabChange={setTab} />
 
         <motion.div
-          className="mt-8 space-y-6"
-          initial={{ opacity: 0, y: 20 }}
+          key={tab}
+          initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.1 }}
+          transition={{ duration: 0.2 }}
         >
-          <div className="glass-strong rounded-3xl p-6 sm:p-8">
-            <div className="mb-6">
-              <div className="mb-4 flex gap-2">
-                <button
-                  onClick={() => setMode('audio')}
-                  className={`flex-1 rounded-xl px-4 py-3 font-medium transition-all ${
-                    mode === 'audio'
-                      ? 'glass glow-accent text-accent2'
-                      : 'bg-surface text-tx-2 hover:bg-surface2'
-                  }`}
-                >
-                  Audio
-                </button>
-                <button
-                  onClick={() => setMode('video')}
-                  className={`flex-1 rounded-xl px-4 py-3 font-medium transition-all ${
-                    mode === 'video'
-                      ? 'glass glow-accent text-accent2'
-                      : 'bg-surface text-tx-2 hover:bg-surface2'
-                  }`}
-                >
-                  Video
-                </button>
-              </div>
-            </div>
-
-            <UrlInput
-              value={url}
-              onChange={setUrl}
-              error={inputError}
-              onClear={() => { setUrl(''); setInputError(''); }}
-            />
-
-            <FormatSelector
-              formats={formats}
-              value={format}
-              onChange={setFormat}
-            />
-
-            <QualitySelector
-              qualities={qualities}
-              value={quality}
-              onChange={setQuality}
-            />
-
-            <ConvertButton
-              onClick={handleConvert}
-              loading={converting}
-              disabled={!url.trim()}
-            />
-          </div>
+          {tab === 'convert' && (<><Hero /><ConvertPanel /></>)}
+          {tab === 'history' && <HistoryPanel />}
+          {tab === 'about' && <AboutSection />}
         </motion.div>
-
-        {activeJobs.length > 0 && (
-          <motion.div
-            className="mt-8"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
-          >
-            <div className="mb-4 flex items-center gap-3">
-              <h2 className="font-mono text-xs uppercase tracking-widest text-tx-3">Active Conversions</h2>
-              <div className="h-px flex-1 bg-brdd" />
-              <span className="rounded-full bg-surface px-2.5 py-1 font-mono text-[10px] text-tx-3">
-                {activeJobs.length}
-              </span>
-            </div>
-
-            <div className="space-y-4">
-              {activeJobs.map((job) => (
-                <JobCard key={job.jobId} job={job} />
-              ))}
-            </div>
-          </motion.div>
-        )}
-
-        <Footer />
       </div>
+    </div>
+  );
+}
+
+const stackItems = [
+  { name: 'Next.js 14', color: 'bg-black text-white' },
+  { name: 'Tailwind CSS', color: 'bg-cyan-950 text-cyan-300' },
+  { name: 'Framer Motion', color: 'bg-violet-950 text-violet-300' },
+  { name: 'FFmpeg', color: 'bg-green-950 text-green-300' },
+  { name: 'yt-dlp', color: 'bg-yellow-950 text-yellow-300' },
+  { name: 'Express', color: 'bg-slate-800 text-slate-300' },
+  { name: 'TypeScript', color: 'bg-blue-950 text-blue-300' },
+  { name: 'Zustand', color: 'bg-orange-950 text-orange-300' },
+  { name: 'WebSockets', color: 'bg-red-950 text-red-300' },
+];
+
+const cards = [
+  {
+    icon: '⚡',
+    title: 'FFmpeg at the core',
+    body: 'Every conversion runs through FFmpeg — the same engine used in VLC, YouTube, and virtually every media pipeline on the planet.',
+  },
+  {
+    icon: '🔗',
+    title: 'URL support',
+    body: 'Paste a YouTube or Vimeo link and convert it directly. Designed for content you have rights to — yt-dlp handles the rest.',
+  },
+  {
+    icon: '🗑️',
+    title: 'Auto cleanup',
+    body: 'Files are stored temporarily and deleted automatically after one hour. Nothing is retained or logged permanently.',
+  },
+  {
+    icon: '📖',
+    title: 'Open source',
+    body: 'MIT licensed. Fork it, self-host it, extend it. The full source is on GitHub and every part is documented.',
+  },
+];
+
+function AboutSection() {
+  return (
+    <div className="flex flex-col items-center py-8">
+
+      <motion.div
+        className="mb-10 text-center"
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35 }}
+      >
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-accent to-accent-3 shadow-lg shadow-accent/30">
+          <span className="text-2xl">⚡</span>
+        </div>
+        <h2 className="mb-2 text-3xl font-extrabold tracking-tight">Transmux</h2>
+        <p className="text-[11px] font-mono tracking-widest text-tx-3 uppercase">v1.0.0 — Full Release</p>
+      </motion.div>
+
+      <motion.p
+        className="mb-10 max-w-lg text-center text-[14px] leading-relaxed text-tx-2"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.1 }}
+      >
+        A self-hosted media converter built on FFmpeg and yt-dlp.
+        Upload a file or paste a URL, pick your output format, download the result.
+        Simple, fast, and completely open source.
+      </motion.p>
+
+      <motion.div
+        className="mb-10 grid w-full max-w-2xl gap-3 sm:grid-cols-2"
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15 }}
+      >
+        {cards.map(({ icon, title, body }) => (
+          <div
+            key={title}
+            className="rounded-2xl border border-brd bg-bg-2 p-5 transition-colors hover:border-brd-2"
+          >
+            <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl border border-brd bg-bg-3 text-lg">
+              {icon}
+            </div>
+            <p className="mb-1.5 text-[13px] font-semibold">{title}</p>
+            <p className="text-[12px] leading-relaxed text-tx-3">{body}</p>
+          </div>
+        ))}
+      </motion.div>
+
+      <motion.div
+        className="mb-6 w-full max-w-2xl overflow-hidden rounded-2xl border border-brd bg-bg-2"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.2 }}
+      >
+        <div className="border-b border-brd px-5 py-3">
+          <p className="text-[11px] font-medium uppercase tracking-widest text-tx-3">Project layout</p>
+        </div>
+        <pre className="p-5 font-mono text-[12px] leading-7 text-tx-2">{`transmux/  frontend/ Next.js — deploys to Vercel  backend/ Express + FFmpeg — any server  shared/ TypeScript types  docs/ API & deployment guides`}</pre>
+      </motion.div>
+
+      <motion.div
+        className="w-full max-w-2xl"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.25 }}
+      >
+        <p className="mb-3 text-center text-[11px] font-medium uppercase tracking-widest text-tx-3">Built with</p>
+        <div className="flex flex-wrap justify-center gap-2">
+          {stackItems.map(({ name, color }) => (
+            <span
+              key={name}
+              className={`rounded-full px-3 py-1.5 text-[11px] font-medium ${color}`}
+            >
+              {name}
+            </span>
+          ))}
+        </div>
+      </motion.div>
+
+      <motion.div
+        className="mt-8 w-full max-w-2xl rounded-2xl border border-brd bg-bg-2 px-6 py-5 text-center"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.3 }}
+      >
+        <p className="text-[12px] leading-relaxed text-tx-3">
+          Only use the URL feature for content you own or have permission to convert.
+          This tool does not bypass DRM or circumvent access controls.
+        </p>
+      </motion.div>
+
     </div>
   );
 }

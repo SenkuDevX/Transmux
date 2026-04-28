@@ -1,5 +1,20 @@
 import { create } from 'zustand';
-import type { ActiveJob, ConversionStatus } from './api';
+import type { ActiveJob } from './api';
+
+type ConversionMode = 'audio' | 'video' | 'subtitle';
+
+interface ConvertSettings {
+  outputFormat: string;
+  quality: string;
+  preset?: string;
+  options: {
+    bitrate?: string;
+    resolution?: string;
+    crf?: number;
+    normalize?: boolean;
+    removeAudio?: boolean;
+  };
+}
 
 interface AppState {
   url: string;
@@ -11,8 +26,8 @@ interface AppState {
   quality: string;
   setQuality: (quality: string) => void;
 
-  mode: 'audio' | 'video' | 'subtitle' | 'image';
-  setMode: (mode: 'audio' | 'video' | 'subtitle' | 'image') => void;
+  mode: ConversionMode;
+  setMode: (mode: ConversionMode) => void;
 
   activeJobs: ActiveJob[];
   addJob: (job: ActiveJob) => void;
@@ -23,11 +38,15 @@ interface AppState {
   files: { id: string; file: File }[];
   addFiles: (files: File[]) => void;
   removeFile: (id: string) => void;
+  clearFiles: () => void;
 
   urlInput: string;
   setUrlInput: (url: string) => void;
   urlMetadata: any;
   setUrlMetadata: (meta: any) => void;
+
+  settings: ConvertSettings;
+  setSettings: (settings: Partial<ConvertSettings>) => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -35,13 +54,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   setUrl: (url) => set({ url }),
 
   format: 'mp3',
-  setFormat: (format) => set({ format }),
+  setFormat: (format) => set({ format, settings: { ...get().settings, outputFormat: format } }),
 
   quality: 'best',
-  setQuality: (quality) => set({ quality }),
+  setQuality: (quality) => set({ quality, settings: { ...get().settings, quality } }),
 
   mode: 'audio',
-  setMode: (mode) => set({ mode, format: mode === 'audio' ? 'mp3' : mode === 'video' ? 'mp4' : 'srt' }),
+  setMode: (mode) => set({ mode }),
 
   activeJobs: [],
   addJob: (job) => set({ activeJobs: [job, ...get().activeJobs] }),
@@ -50,9 +69,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       j.jobId === jobId ? { ...j, ...updates } : j
     ),
   }),
-  removeJob: (jobId) => set({
-    activeJobs: get().activeJobs.filter(j => j.jobId !== jobId),
-  }),
+  removeJob: (jobId) => set({ activeJobs: get().activeJobs.filter(j => j.jobId !== jobId) }),
   clearCompletedJobs: () => set({
     activeJobs: get().activeJobs.filter(j =>
       j.status !== 'completed' && j.status !== 'failed' && j.status !== 'expired'
@@ -62,11 +79,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   files: [],
   addFiles: (newFiles) => set({ files: [...get().files, ...newFiles.map((file, i) => ({ id: `${Date.now()}-${i}`, file }))] }),
   removeFile: (id) => set({ files: get().files.filter(f => f.id !== id) }),
+  clearFiles: () => set({ files: [] }),
 
   urlInput: '',
   setUrlInput: (url) => set({ urlInput: url }),
   urlMetadata: null,
   setUrlMetadata: (meta) => set({ urlMetadata: meta }),
+
+  settings: { outputFormat: 'mp3', quality: 'best', options: {} },
+  setSettings: (newSettings) => set({ settings: { ...get().settings, ...newSettings } }),
 }));
 
 export const AUDIO_FORMATS = ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus'];

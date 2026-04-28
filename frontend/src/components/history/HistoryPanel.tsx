@@ -5,6 +5,20 @@ import { Download, Clock } from 'lucide-react';
 import { useAppStore } from '@/lib/store';
 import { getDownloadUrl } from '@/lib/api';
 
+const FILE_ICONS: Record<string, string> = {
+  mp3: '🎵', wav: '🎵', flac: '🎵', ogg: '🎵', aac: '🎵', m4a: '🎵',
+  mp4: '🎬', mkv: '🎬', webm: '🎬', mov: '🎬', avi: '🎬',
+  srt: '💬', vtt: '💬',
+  png: '🖼️', jpg: '🖼️', webp: '🖼️',
+};
+
+function formatSize(bytes?: number) {
+  if (!bytes) return '—';
+  return bytes < 1024 * 1024
+    ? `${(bytes / 1024).toFixed(0)} KB`
+    : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
 export default function HistoryPanel() {
   const { activeJobs: jobs } = useAppStore();
   const doneJobs = jobs.filter(j => j.status === 'completed');
@@ -37,38 +51,37 @@ export default function HistoryPanel() {
                 className="flex items-center gap-3 border-b border-brd px-5 py-3.5 last:border-b-0 hover:bg-surface/50 transition-colors"
               >
                 <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-surface text-lg">
-                  📄
+                  {FILE_ICONS[job.outputFormat || ''] || '📄'}
                 </div>
 
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium">
-                    {job.inputName || 'Conversion'}
+                    {job.outputFormat?.toUpperCase() || 'File'}
                   </div>
                   <div className="mt-0.5 flex items-center gap-2 font-mono text-[10px] text-tx-3">
-                    <span>{job.outputFormat}</span>
+                    <span>{job.inputName}</span>
+                    <span>→</span>
+                    <span className="text-accent-2">{job.outputFormat?.toUpperCase()}</span>
                   </div>
                 </div>
 
                 <div className="hidden items-center gap-1 font-mono text-[10px] text-tx-3 sm:flex">
-                  {job.expiresAt && (
-                    <>
-                      <Clock size={10} />
-                      Expires: {new Date(job.expiresAt).toLocaleDateString()}
-                    </>
-                  )}
+                  <Download size={10} />
+                  Ready
                 </div>
 
-                {job.downloadUrl && (
-                  <a
-                    href={job.downloadUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-green-500/30 bg-green-500/10 px-3 py-1.5 font-mono text-[11px] text-green-400 transition-all hover:bg-green-500/20"
-                  >
-                    <Download size={11} />
-                    ↓
-                  </a>
-                )}
+                <button
+                  onClick={() => {
+                    const a = document.createElement('a');
+                    a.href = getDownloadUrl(job.jobId);
+                    a.download = job.inputName || 'output';
+                    a.click();
+                  }}
+                  className="flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-green-500/30 bg-green-500/10 px-3 py-1.5 font-mono text-[11px] text-green-400 transition-all hover:bg-green-500/20"
+                >
+                  <Download size={11} />
+                  ↓
+                </button>
               </motion.div>
             ))}
           </AnimatePresence>

@@ -14,7 +14,6 @@ export function useTheme() { return useContext(ThemeCtx); }
 export default function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>('dark');
 
-  // Persist to localStorage and apply class to <html>
   useEffect(() => {
     const saved = localStorage.getItem('transmux-theme') as Theme | null;
     if (saved) setTheme(saved);

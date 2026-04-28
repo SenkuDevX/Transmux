@@ -1,52 +1,45 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Music, Video, Link2 } from 'lucide-react';
 
 export default function Hero() {
   return (
-    <div className="py-12 text-center">
+    <motion.div
+      className="mb-12 text-center"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+    >
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
+        className="mb-5 inline-flex items-center gap-2 rounded-full border border-accent/25 bg-accent/10 px-4 py-1.5 font-mono text-[11px] tracking-wider text-accent-2"
+        initial={{ opacity: 0, scale: 0.92 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ delay: 0.1 }}
       >
-        <h2 className="mb-3 text-4xl font-extrabold tracking-tight sm:text-5xl">
-          <span className="text-gradient">Convert Media</span>
-          <br />
-          <span className="text-tx">in Seconds</span>
-        </h2>
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-green-400" />
+        FFmpeg · yt-dlp · Self-hosted · v1.0.0
       </motion.div>
+
+      <motion.h1
+        className="mb-4 text-5xl font-extrabold leading-tight tracking-tight md:text-6xl"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.15 }}
+      >
+        Convert anything.
+        <br />
+        <span className="text-gradient">Keep it simple.</span>
+      </motion.h1>
 
       <motion.p
-        className="mx-auto mb-8 max-w-lg text-tx-2"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.1 }}
+        className="mx-auto max-w-lg text-[15px] leading-relaxed text-tx-2"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.2 }}
       >
-        Paste a YouTube, Vimeo, or SoundCloud link. Pick your format.
-        Get a downloadable file that expires in 1 hour.
+        Audio, video and subtitle conversion powered by FFmpeg.
+        Drop a file or paste a URL to get started.
       </motion.p>
-
-      <motion.div
-        className="flex flex-wrap justify-center gap-4"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.2 }}
-      >
-        <div className="flex items-center gap-2 rounded-xl bg-surface/50 px-4 py-2">
-          <Music className="h-4 w-4 text-accent2" />
-          <span className="text-sm text-tx-2">Audio Extraction</span>
-        </div>
-        <div className="flex items-center gap-2 rounded-xl bg-surface/50 px-4 py-2">
-          <Video className="h-4 w-4 text-accent3" />
-          <span className="text-sm text-tx-2">Video Conversion</span>
-        </div>
-        <div className="flex items-center gap-2 rounded-xl bg-surface/50 px-4 py-2">
-          <Link2 className="h-4 w-4 text-green-400" />
-          <span className="text-sm text-tx-2">URL Support</span>
-        </div>
-      </motion.div>
-    </div>
+    </motion.div>
   );
 }

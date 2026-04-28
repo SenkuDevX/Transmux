@@ -2,8 +2,7 @@
 
 import { motion } from 'framer-motion';
 import { Zap, Sun, Moon } from 'lucide-react';
-
-type AppTab = 'convert' | 'history' | 'about';
+import type { AppTab } from '@/app/page';
 import { useTheme } from './ThemeProvider';
 
 interface NavbarProps {
@@ -14,7 +13,7 @@ interface NavbarProps {
 const tabs: { id: AppTab; label: string }[] = [
   { id: 'convert', label: 'Convert' },
   { id: 'history', label: 'History' },
-  { id: 'about',   label: 'About'   },
+  { id: 'about', label: 'About' },
 ];
 
 export default function Navbar({ activeTab, onTabChange }: NavbarProps) {
