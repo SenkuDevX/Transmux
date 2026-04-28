@@ -10,7 +10,7 @@ import JobProgress from '../progress/JobProgress';
 import FeatureCards from './FeatureCards';
 import { useAppStore } from '@/lib/store';
 import { createUrlJob } from '@/lib/api';
-import type { ActiveJob } from '@/lib/api';
+import type { ActiveJob, ConversionStatus } from '@/lib/api';
 
 export default function ConvertPanel() {
   const { mode } = useAppStore();
@@ -33,7 +33,7 @@ export default function ConvertPanel() {
       });
       useAppStore.getState().addJob({
         jobId: response.jobId,
-        status: response.status,
+        status: response.status as ConversionStatus,
         progress: 0,
       });
       toast.success('Job queued');
