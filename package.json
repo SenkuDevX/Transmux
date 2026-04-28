@@ -1,5 +1,3 @@
-# Root package.json for Transmux monorepo
-
 {
   "name": "transmux",
   "version": "1.0.0",
