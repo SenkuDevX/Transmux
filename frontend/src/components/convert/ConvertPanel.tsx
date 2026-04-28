@@ -12,7 +12,7 @@ import JobProgress from '../progress/JobProgress';
 import FeatureCards from './FeatureCards';
 import { useAppStore } from '@/lib/store';
 import { createFileJob, createUrlJob } from '@/lib/api';
-import type { ConversionJob } from '@transmux/shared';
+import type { ActiveJob } from '@/lib/api';
 
 export default function ConvertPanel() {
   const { files, urlMetadata, settings, mode, addJob, clearFiles } = useAppStore();
@@ -41,14 +41,14 @@ export default function ConvertPanel() {
       if (files.length > 0) {
         for (const fileItem of files) {
           const { job } = await createFileJob(fileItem.file, meta);
-          addJob(job as unknown as ConversionJob);
+          addJob(job as unknown as ActiveJob);
           toast.success(`Job queued: ${fileItem.file.name}`);
         }
         clearFiles();
       } else if (urlMetadata) {
         const sourceUrl = (urlMetadata as any).url;
         const { job } = await createUrlJob({ ...meta, sourceUrl });
-        addJob(job as unknown as ConversionJob);
+        addJob(job as unknown as ActiveJob);
         toast.success('URL job queued');
       }
     } catch (err: any) {

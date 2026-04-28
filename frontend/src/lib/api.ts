@@ -29,6 +29,24 @@ export async function createConversionJob(params: {
   });
 }
 
+export async function createUrlJob(params: {
+  sourceUrl: string;
+  mode: string;
+  outputFormat: string;
+  options?: any;
+}) {
+  return createConversionJob({
+    url: params.sourceUrl,
+    format: params.outputFormat,
+    quality: params.options?.quality,
+    mode: params.mode,
+  });
+}
+
+export async function createFileJob(file: File, meta: any) {
+  throw new Error('File upload is not supported on this platform. Please use URL input instead.');
+}
+
 export async function getJobStatus(jobId: string) {
   return request<{
     jobId: string;
