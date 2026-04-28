@@ -55,7 +55,7 @@ export default function JobProgress() {
         <span className="rounded-full bg-surface px-2 py-0.5 font-mono text-[10px] text-tx-3">{jobs.length}</span>
       </div>
       <AnimatePresence initial={false}>
-        {jobs.map(job => <JobCard key={job.id} job={job} />)}
+        {jobs.map(job => <JobCard key={job.jobId} job={job} />)}
       </AnimatePresence>
     </div>
   );
