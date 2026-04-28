@@ -22,7 +22,7 @@ const STATUS: Record<ConversionStatus, { label: string; dot: string; ring: strin
 export default function JobProgress() {
   const { activeJobs: jobs, updateJob } = useAppStore();
   const wsRef = useRef<WebSocket | null>(null);
-  const activeCount = jobs.filter(j => j.status === 'queued' || j.status === 'processing').length;
+  const activeCount = jobs.filter(j => j.status === 'queued' || j.status === 'converting').length;
 
   useEffect(() => {
     if (activeCount === 0 || typeof window === 'undefined') return;
@@ -90,7 +90,7 @@ function JobCard({ job }: { job: ConversionJob }) {
 
         {/* Top row — name + status badge */}
         <div className="mb-3 flex items-center gap-3">
-          <div className={`mt-0.5 h-2 w-2 flex-shrink-0 rounded-full ${s.dot} ${job.status === 'processing' ? 'animate-pulse' : ''}`} />
+          <div className={`mt-0.5 h-2 w-2 flex-shrink-0 rounded-full ${s.dot} ${job.status === 'converting' ? 'animate-pulse' : ''}`} />
           <div className="min-w-0 flex-1">
             <p className="truncate text-[13px] font-medium text-tx">
               {job.inputName.replace(/\.[^.]+$/, '')}
@@ -106,7 +106,7 @@ function JobCard({ job }: { job: ConversionJob }) {
         </div>
 
         {/* Progress bar */}
-        {(job.status === 'queued' || job.status === 'processing') && (
+        {(job.status === 'queued' || job.status === 'converting') && (
           <div className="mb-3">
             <div className="mb-1.5 h-[3px] overflow-hidden rounded-full bg-surface">
               <motion.div
@@ -131,7 +131,7 @@ function JobCard({ job }: { job: ConversionJob }) {
         )}
 
         {/* Download */}
-        {job.status === 'done' && (
+        {job.status === 'completed' && (
           <motion.button
             onClick={download}
             initial={{ opacity: 0 }}
