@@ -25,13 +25,17 @@ export default function ConvertPanel() {
 
     setConverting(true);
     try {
-      const { job } = await createUrlJob({
+      const response = await createUrlJob({
         sourceUrl: url,
         mode,
         outputFormat: useAppStore.getState().format,
         options: { quality: useAppStore.getState().quality },
       });
-      useAppStore.getState().addJob(job as unknown as ActiveJob);
+      useAppStore.getState().addJob({
+        jobId: response.jobId,
+        status: response.status,
+        progress: 0,
+      });
       toast.success('Job queued');
       setUrl('');
     } catch (err: any) {
