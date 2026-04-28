@@ -28,7 +28,7 @@
     }
   ],
   "env": {
-    "NEXT_PUBLIC_API_URL": "@transmux-api-url",
-    "NEXT_PUBLIC_WS_URL": "@transmux-ws-url"
+    "NEXT_PUBLIC_API_URL": "https://your-backend.onrender.com",
+    "NEXT_PUBLIC_WS_URL": ""
   }
 }
