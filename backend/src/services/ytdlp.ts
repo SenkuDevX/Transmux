@@ -2,7 +2,7 @@ import { execFile, spawn } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs';
-import type { UrlMetadata, UrlFormat } from '../shared/src/types';
+import type { UrlMetadata, UrlFormat } from '../types';
 import { logger } from '../utils/logger';
 import { TEMP_DIR, MAX_DURATION_SECONDS } from '../utils/constants';
 

@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import type { JobStatus } from '../shared/src/types';
+import type { JobStatus } from '../types';
 
 interface ConversionJob {
   id: string;

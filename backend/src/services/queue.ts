@@ -3,7 +3,7 @@ import IORedis from 'ioredis';
 import { logger } from '../utils/logger';
 import { MAX_CONCURRENT_JOBS, JOB_TIMEOUT_MS } from '../utils/constants';
 import { processConversionJob } from './jobProcessor';
-import type { ConversionJob } from '@transmux/shared';
+import type { ConversionJob } from '../types';
 
 let connection: IORedis | null = null;
 let conversionQueue: Queue | null = null;

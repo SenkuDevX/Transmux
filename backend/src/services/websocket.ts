@@ -1,5 +1,5 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
-import type { ConversionJob, JobStatus } from '@transmux/shared';
+import type { ConversionJob, JobStatus } from '../types';
 import { logger } from '../utils/logger';
 
 let io: SocketIOServer | null = null;
