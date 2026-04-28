@@ -11,8 +11,8 @@ interface AppState {
   quality: string;
   setQuality: (quality: string) => void;
 
-  mode: 'audio' | 'video';
-  setMode: (mode: 'audio' | 'video') => void;
+  mode: 'audio' | 'video' | 'subtitle' | 'image';
+  setMode: (mode: 'audio' | 'video' | 'subtitle' | 'image') => void;
 
   activeJobs: ActiveJob[];
   addJob: (job: ActiveJob) => void;
@@ -32,7 +32,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setQuality: (quality) => set({ quality }),
 
   mode: 'audio',
-  setMode: (mode) => set({ mode, format: mode === 'audio' ? 'mp3' : 'mp4' }),
+  setMode: (mode) => set({ mode, format: mode === 'audio' ? 'mp3' : mode === 'video' ? 'mp4' : 'srt' }),
 
   activeJobs: [],
   addJob: (job) => set({ activeJobs: [job, ...get().activeJobs] }),
