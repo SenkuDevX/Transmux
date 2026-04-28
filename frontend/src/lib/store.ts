@@ -19,6 +19,15 @@ interface AppState {
   updateJob: (jobId: string, updates: Partial<ActiveJob>) => void;
   removeJob: (jobId: string) => void;
   clearCompletedJobs: () => void;
+
+  files: { id: string; file: File }[];
+  addFiles: (files: File[]) => void;
+  removeFile: (id: string) => void;
+
+  urlInput: string;
+  setUrlInput: (url: string) => void;
+  urlMetadata: any;
+  setUrlMetadata: (meta: any) => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -49,6 +58,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       j.status !== 'completed' && j.status !== 'failed' && j.status !== 'expired'
     ),
   }),
+
+  files: [],
+  addFiles: (newFiles) => set({ files: [...get().files, ...newFiles.map((file, i) => ({ id: `${Date.now()}-${i}`, file }))] }),
+  removeFile: (id) => set({ files: get().files.filter(f => f.id !== id) }),
+
+  urlInput: '',
+  setUrlInput: (url) => set({ urlInput: url }),
+  urlMetadata: null,
+  setUrlMetadata: (meta) => set({ urlMetadata: meta }),
 }));
 
 export const AUDIO_FORMATS = ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus'];

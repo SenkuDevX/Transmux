@@ -66,14 +66,13 @@ function fmt(bytes?: number) {
   return bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(0)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function JobCard({ job }: { job: ConversionJob }) {
+function JobCard({ job }: { job: ActiveJob }) {
   const s = STATUS[job.status];
-  const outputSize = fmt(job.outputSize);
 
   const download = () => {
     const a = document.createElement('a');
-    a.href = getDownloadUrl(job.id);
-    a.download = job.outputName || 'output';
+    a.href = getDownloadUrl(job.jobId);
+    a.download = job.inputName || 'output';
     a.click();
   };
 
@@ -93,12 +92,11 @@ function JobCard({ job }: { job: ConversionJob }) {
           <div className={`mt-0.5 h-2 w-2 flex-shrink-0 rounded-full ${s.dot} ${job.status === 'converting' ? 'animate-pulse' : ''}`} />
           <div className="min-w-0 flex-1">
             <p className="truncate text-[13px] font-medium text-tx">
-              {job.inputName.replace(/\.[^.]+$/, '')}
+              {(job.inputName || 'Untitled').replace(/\.[^.]+$/, '')}
             </p>
-            <p className="mt-0.5 font-mono text-[10px] text-tx-3">
-              → {job.outputFormat}
-              {outputSize && <span className="ml-2 text-tx-3">{outputSize}</span>}
-            </p>
+<p className="mt-0.5 font-mono text-[10px] text-tx-3">
+          → {job.outputFormat}
+        </p>
           </div>
           <span className={`flex-shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-medium ${s.ring}`}>
             {s.label}
@@ -118,7 +116,6 @@ function JobCard({ job }: { job: ConversionJob }) {
             </div>
             <div className="flex justify-between font-mono text-[10px] text-tx-3">
               <span>{job.status === 'queued' ? 'Waiting…' : `${Math.round(job.progress)}%`}</span>
-              <span>{new Date(job.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
             </div>
           </div>
         )}
