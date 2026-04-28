@@ -35,7 +35,7 @@ export default function JobProgress() {
       ws.onmessage = (e) => {
         try {
           const d = JSON.parse(e.data);
-          if (d.type === 'job_update' && d.job) updateJob(d.job.id, d.job as ConversionJob);
+          if (d.type === 'job_update' && d.job) updateJob(d.job.jobId, d.job as Partial<ActiveJob>);
         } catch { /* ignore */ }
       };
       ws.onerror = () => { wsRef.current = null; };
