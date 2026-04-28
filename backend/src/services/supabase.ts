@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import type { JobStatus, ConversionMode } from '../types';
+import type { JobStatus, ConversionMode, OutputFormat } from '../types';
 
 interface ConversionJob {
   id: string;
@@ -8,7 +8,7 @@ interface ConversionJob {
   sourceUrl?: string;
   inputName: string;
   inputSize: number;
-  outputFormat: string;
+  outputFormat: OutputFormat;
   options: any;
   progress: number;
   outputName?: string;
