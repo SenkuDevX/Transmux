@@ -1,6 +1,5 @@
 import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
 import fs from 'fs';
-import path from 'path';
 import { logger } from '../utils/logger';
 import { TEMP_DIR } from '../utils/constants';
 
@@ -23,7 +22,7 @@ export async function uploadToCloudinary(
   options: {
     folder?: string;
     tags?: string[];
-    resourceType?: 'video' | 'audio' | 'image' | 'raw';
+    resourceType?: 'video' | 'image' | 'raw';
     publicId?: string;
   } = {}
 ): Promise<UploadResult> {
@@ -45,7 +44,6 @@ export async function uploadToCloudinary(
         resource_type: resourceType,
         public_id: safePublicId,
         overwrite: true,
-        expiration: Math.floor((Date.now() + 60 * 60 * 1000) / 1000),
       },
       (error, result: UploadApiResponse | undefined) => {
         if (error) {
@@ -122,11 +120,11 @@ export function isCloudinaryConfigured(): boolean {
   );
 }
 
-export function getResourceType(format: string): 'video' | 'audio' | 'image' | 'raw' {
+export function getResourceType(format: string): 'video' | 'image' | 'raw' {
   const audioFormats = ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac', 'opus', 'aiff', 'wma', 'amr'];
   const imageFormats = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'tiff'];
 
-  if (audioFormats.includes(format.toLowerCase())) return 'audio';
+  if (audioFormats.includes(format.toLowerCase())) return 'raw';
   if (imageFormats.includes(format.toLowerCase())) return 'image';
   return 'video';
 }
@@ -150,7 +148,7 @@ export function cleanAllTempFiles(): void {
     let cleaned = 0;
 
     for (const file of files) {
-      const filePath = path.join(TEMP_DIR, file);
+      const filePath = `${TEMP_DIR}/${file}`;
       try {
         fs.unlinkSync(filePath);
         cleaned++;

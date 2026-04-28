@@ -5,7 +5,6 @@ import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import dotenv from 'dotenv';
 import fs from 'fs';
-import path from 'path';
 import { logger } from './utils/logger';
 import { globalRateLimiter } from './middleware/rateLimit';
 import { errorHandler } from './middleware/errorHandler';
@@ -14,7 +13,7 @@ import { statusRoutes } from './routes/status';
 import { downloadRoutes } from './routes/download';
 import { cleanupRoutes } from './routes/cleanup';
 import { healthRoutes } from './routes/health';
-import { registerWsHandlers, emitJobUpdate } from './services/websocket';
+import { registerWsHandlers } from './services/websocket';
 import { initializeQueue } from './services/queue';
 import { startCleanupScheduler } from './services/cleanupWorker';
 import { TEMP_DIR } from './utils/constants';
@@ -24,9 +23,11 @@ dotenv.config();
 const app = express();
 const server = createServer(app);
 
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+
 const io = new SocketIOServer(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || '*',
+    origin: [FRONTEND_URL, /localhost:\d+/],
     methods: ['GET', 'POST'],
     credentials: true,
   },
@@ -34,7 +35,6 @@ const io = new SocketIOServer(server, {
 });
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
 if (!fs.existsSync(TEMP_DIR)) {
   fs.mkdirSync(TEMP_DIR, { recursive: true });
@@ -82,7 +82,7 @@ initializeQueue().then(() => {
 startCleanupScheduler();
 
 server.listen(PORT, () => {
-  logger.info(`🚀 Transmux backend running on port ${PORT}`);
+  logger.info(`Transmux backend running on port ${PORT}`);
   logger.info(` Frontend: ${FRONTEND_URL}`);
   logger.info(` Temp dir: ${TEMP_DIR}`);
 });
@@ -95,4 +95,4 @@ process.on('SIGTERM', async () => {
   });
 });
 
-export { io, emitJobUpdate };
+export { io };

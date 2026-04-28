@@ -1,5 +1,4 @@
 import { Request, Response, NextFunction } from 'express';
-import { isUrlPermitted, sanitiseTitle } from '../services/ytdlp';
 import { logger } from '../utils/logger';
 
 export function validateUrlInput(req: Request, res: Response, next: NextFunction): void {

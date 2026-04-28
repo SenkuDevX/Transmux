@@ -110,7 +110,6 @@ export async function addJobToQueue(job: ConversionJob): Promise<string> {
     job,
     {
       jobId: job.id,
-      timeout: JOB_TIMEOUT_MS,
     }
   );
 
@@ -120,7 +119,8 @@ export async function addJobToQueue(job: ConversionJob): Promise<string> {
 
 export async function getJobFromQueue(jobId: string): Promise<Job | null> {
   if (!conversionQueue) return null;
-  return await conversionQueue.getJob(jobId);
+  const job = await conversionQueue.getJob(jobId);
+  return job || null;
 }
 
 export async function getQueueStats(): Promise<{

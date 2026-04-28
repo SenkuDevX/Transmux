@@ -10,6 +10,7 @@ function resolveTempDir(): string {
 export const TEMP_DIR = resolveTempDir();
 export const MAX_FILE_SIZE_MB = parseInt(process.env.MAX_FILE_SIZE_MB || '500', 10);
 export const FILE_EXPIRY_HOURS = 1;
+export const FILE_CLEANUP_HOURS = 1;
 export const MAX_DURATION_SECONDS = parseInt(process.env.MAX_DURATION_SECONDS || '3600', 10);
 export const CLEANUP_INTERVAL_MINUTES = 10;
 export const MAX_CONCURRENT_JOBS = parseInt(process.env.MAX_CONCURRENT_JOBS || '2', 10);

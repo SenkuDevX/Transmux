@@ -1,6 +1,5 @@
 import ffmpeg from 'fluent-ffmpeg';
 import path from 'path';
-import type { OutputFormat, AudioOptions, VideoOptions } from '@transmux/shared';
 import { logger } from '../utils/logger';
 import { TEMP_DIR } from '../utils/constants';
 
@@ -18,7 +17,7 @@ function safeBase(name: string): string {
     || 'output';
 }
 
-function formatToExt(format: OutputFormat): string {
+function formatToExt(format: string): string {
   const map: Record<string, string> = {
     mp3: 'mp3', wav: 'wav', ogg: 'ogg', m4a: 'm4a', aac: 'aac',
     flac: 'flac', opus: 'opus', aiff: 'aiff', wma: 'wma', amr: 'amr',
@@ -31,7 +30,7 @@ function formatToExt(format: OutputFormat): string {
   return map[String(format).toLowerCase()] || String(format).toLowerCase();
 }
 
-export function buildOutputPath(jobId: string, inputName: string, format: OutputFormat): string {
+export function buildOutputPath(jobId: string, inputName: string, format: string): string {
   const rawBase = path.basename(inputName, path.extname(inputName));
   const base = safeBase(rawBase);
   const ext = formatToExt(format);
@@ -47,8 +46,8 @@ export async function probeFile(filePath: string): Promise<any> {
   return new Promise((resolve, reject) => {
     ffmpeg.ffprobe(toFfmpegPath(filePath), (err, data) => {
       if (err) return reject(err);
-      const video = data.streams.find(s => s.codec_type === 'video');
-      const audio = data.streams.find(s => s.codec_type === 'audio');
+      const video = data.streams.find((s: any) => s.codec_type === 'video');
+      const audio = data.streams.find((s: any) => s.codec_type === 'audio');
       const fmt = data.format;
 
       let fps: number | undefined;
@@ -78,8 +77,8 @@ export async function probeFile(filePath: string): Promise<any> {
 export async function convertAudio(
   inputPath: string,
   outputPath: string,
-  format: OutputFormat,
-  options: Partial<AudioOptions>,
+  format: string,
+  options: any,
   onProgress: (pct: number) => void
 ): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -116,12 +115,12 @@ export async function convertAudio(
     cmd = cmd.noVideo();
 
     const outPath = toFfmpegPath(outputPath);
-    logger.info(`Audio convert: "${toFfmpegPath(inputPath)}" → "${outPath}"`);
+    logger.info(`Audio convert: "${toFfmpegPath(inputPath)}" -> "${outPath}"`);
 
     cmd
-      .on('progress', p => onProgress(Math.min(p.percent ?? 0, 99)))
+      .on('progress', (p: any) => onProgress(Math.min(p.percent ?? 0, 99)))
       .on('end', () => { onProgress(100); resolve(); })
-      .on('error', (err, _stdout, stderr) => reject(ffmpegError(err, stderr)))
+      .on('error', (err: Error, _stdout: any, stderr: any) => reject(ffmpegError(err, stderr)))
       .save(outPath);
   });
 }
@@ -129,8 +128,8 @@ export async function convertAudio(
 export async function convertVideo(
   inputPath: string,
   outputPath: string,
-  format: OutputFormat,
-  options: Partial<VideoOptions>,
+  format: string,
+  options: any,
   onProgress: (pct: number) => void
 ): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -170,12 +169,12 @@ export async function convertVideo(
     if (options.removeAudio) cmd = cmd.noAudio();
 
     const outPath = toFfmpegPath(outputPath);
-    logger.info(`Video convert: "${toFfmpegPath(inputPath)}" → "${outPath}"`);
+    logger.info(`Video convert: "${toFfmpegPath(inputPath)}" -> "${outPath}"`);
 
     cmd
-      .on('progress', p => onProgress(Math.min(p.percent ?? 0, 99)))
+      .on('progress', (p: any) => onProgress(Math.min(p.percent ?? 0, 99)))
       .on('end', () => { onProgress(100); resolve(); })
-      .on('error', (err, _stdout, stderr) => reject(ffmpegError(err, stderr)))
+      .on('error', (err: Error, _stdout: any, stderr: any) => reject(ffmpegError(err, stderr)))
       .save(outPath);
   });
 }
@@ -184,15 +183,15 @@ export async function convertMedia(
   inputPath: string,
   outputPath: string,
   mode: string,
-  format: OutputFormat,
+  format: string,
   options: any,
   onProgress: (pct: number) => void
 ): Promise<void> {
   switch (mode) {
     case 'audio':
-      return convertAudio(inputPath, outputPath, format, options as Partial<AudioOptions>, onProgress);
+      return convertAudio(inputPath, outputPath, format, options, onProgress);
     case 'video':
-      return convertVideo(inputPath, outputPath, format, options as Partial<VideoOptions>, onProgress);
+      return convertVideo(inputPath, outputPath, format, options, onProgress);
     default:
       throw new Error(`Unsupported mode: ${mode}`);
   }

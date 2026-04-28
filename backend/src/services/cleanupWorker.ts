@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import { logger, logCleanupStats } from '../utils/logger';
 import { CLEANUP_INTERVAL_MINUTES, FILE_EXPIRY_HOURS } from '../utils/constants';
-import { getExpiredJobs, markJobsAsExpired } from './supabase';
+import { getExpiredJobs, markJobsAsExpired, ExpiredJobInfo } from './supabase';
 import { deleteMultipleFromCloudinary } from './cloudinary';
 
 let cleanupTask: cron.ScheduledTask | null = null;
@@ -20,7 +20,7 @@ export async function runCleanup(): Promise<{ deletedCount: number; expiredCount
   const result = { deletedCount: 0, expiredCount: 0, errors: [] as string[] };
 
   try {
-    const expiredJobs = await getExpiredJobs();
+    const expiredJobs: ExpiredJobInfo[] = await getExpiredJobs();
 
     if (expiredJobs.length === 0) {
       return result;
@@ -30,7 +30,7 @@ export async function runCleanup(): Promise<{ deletedCount: number; expiredCount
 
     const publicIds = expiredJobs
       .filter(j => j.publicId)
-      .map(j => j.publicId);
+      .map(j => j.publicId as string);
 
     const jobIds = expiredJobs.map(j => j.jobId);
 

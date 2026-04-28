@@ -1,5 +1,23 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import type { ConversionJob, JobStatus } from '@transmux/shared';
+import type { JobStatus } from '../shared/src/types';
+
+interface ConversionJob {
+  id: string;
+  status: JobStatus;
+  sourceUrl?: string;
+  inputName: string;
+  inputSize: number;
+  outputFormat: string;
+  options: any;
+  progress: number;
+  downloadUrl?: string;
+  cloudinaryPublicId?: string;
+  error?: string;
+  createdAt: string;
+  updatedAt: string;
+  expiresAt: string;
+}
+
 import { logger } from '../utils/logger';
 
 let supabase: SupabaseClient | null = null;
@@ -27,14 +45,28 @@ export function initializeSupabase(): SupabaseClient {
   return supabase;
 }
 
-function createMockClient(): SupabaseClient {
-  const mockData = new Map<string, ConversionJob>();
+interface MockJob {
+  id: string;
+  job_id: string;
+  source_url: string | null;
+  format: string;
+  status: JobStatus;
+  progress: number;
+  download_url: string | null;
+  cloudinary_public_id: string | null;
+  created_at: string;
+  expires_at: string;
+  error: string | null;
+}
 
+const mockData = new Map<string, MockJob>();
+
+function createMockClient(): SupabaseClient {
   return {
     from: () => ({
       insert: async (data: any) => {
-        const job = data[0] as ConversionJob;
-        mockData.set(job.id, job);
+        const job = data[0] as MockJob;
+        mockData.set(job.job_id, job);
         return { data: [job], error: null };
       },
       update: (data: any) => ({
@@ -135,20 +167,20 @@ export async function getJobRecord(jobId: string): Promise<ConversionJob | null>
     if (error || !data) return null;
 
     return {
-      id: data.job_id,
-      status: data.status as JobStatus,
-      sourceUrl: data.source_url,
-      inputName: data.source_url || 'Unknown',
+      id: (data as any).job_id,
+      status: (data as any).status as JobStatus,
+      sourceUrl: (data as any).source_url,
+      inputName: (data as any).source_url || 'Unknown',
       inputSize: 0,
-      outputFormat: data.format,
+      outputFormat: (data as any).format,
       options: {},
-      progress: data.progress || 0,
-      downloadUrl: data.download_url,
-      cloudinaryPublicId: data.cloudinary_public_id,
-      error: data.error,
-      createdAt: data.created_at,
-      updatedAt: data.created_at,
-      expiresAt: data.expires_at,
+      progress: (data as any).progress || 0,
+      downloadUrl: (data as any).download_url,
+      cloudinaryPublicId: (data as any).cloudinary_public_id,
+      error: (data as any).error,
+      createdAt: (data as any).created_at,
+      updatedAt: (data as any).created_at,
+      expiresAt: (data as any).expires_at,
     };
   } catch (err) {
     logger.error(`Exception getting job ${jobId}`, err);
@@ -156,7 +188,12 @@ export async function getJobRecord(jobId: string): Promise<ConversionJob | null>
   }
 }
 
-export async function getExpiredJobs(): Promise<string[]> {
+export interface ExpiredJobInfo {
+  jobId: string;
+  publicId: string | null;
+}
+
+export async function getExpiredJobs(): Promise<ExpiredJobInfo[]> {
   const client = initializeSupabase();
   try {
     const now = new Date().toISOString();

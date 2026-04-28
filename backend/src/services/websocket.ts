@@ -57,6 +57,10 @@ export function emitJobUpdate(job: ConversionJob): void {
   io.to(`job:${job.id}`).emit('job-update', { type: 'job_update', job });
 }
 
+export function broadcastJob(job: ConversionJob): void {
+  emitJobUpdate(job);
+}
+
 export function broadcastToAll(event: string, data: any): void {
   if (!io) return;
   io.emit(event, data);

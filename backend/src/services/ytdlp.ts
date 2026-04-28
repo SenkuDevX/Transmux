@@ -2,7 +2,7 @@ import { execFile, spawn } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs';
-import type { UrlMetadata, UrlFormat } from '@transmux/shared';
+import type { UrlMetadata, UrlFormat } from '../shared/src/types';
 import { logger } from '../utils/logger';
 import { TEMP_DIR, MAX_DURATION_SECONDS } from '../utils/constants';
 
@@ -50,7 +50,7 @@ export async function fetchUrlMetadata(url: string): Promise<UrlMetadata> {
       '--no-playlist',
       '--no-warnings',
       url,
-    ], { timeout: 30_000 });
+    ], { timeout: 30000 });
 
     const data = JSON.parse(stdout);
 
@@ -108,7 +108,7 @@ export async function downloadUrl(
       '--no-playlist',
       '--no-warnings',
       url,
-    ], { timeout: 15_000 });
+    ], { timeout: 15000 });
     title = sanitiseTitle(stdout.trim());
   } catch {
     // Non-fatal — fall back to 'download'
@@ -135,7 +135,7 @@ export async function downloadUrl(
 
   logger.info(`yt-dlp download start: ${url} (audioOnly=${audioOnly})`);
 
-  return new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     const proc = spawn(YTDLP_BIN, args, { stdio: ['ignore', 'pipe', 'pipe'] });
 
     let stderr = '';
@@ -163,20 +163,20 @@ export async function downloadUrl(
     });
 
     proc.on('error', (err) => reject(new Error(`yt-dlp spawn failed: ${err.message}`)));
-  }).then(() => {
-    const files = fs.readdirSync(TEMP_DIR).filter(f => f.startsWith(`${jobId}_`));
-    if (!files.length) {
-      throw new Error('yt-dlp completed but no output file found in temp dir');
-    }
-
-    const picked = files
-      .map(f => ({ name: f, size: fs.statSync(path.join(TEMP_DIR, f)).size }))
-      .sort((a, b) => b.size - a.size)[0];
-
-    const filePath = path.join(TEMP_DIR, picked.name);
-    const ext = path.extname(picked.name).slice(1);
-
-    logger.info(`yt-dlp downloaded: ${filePath} (${picked.size} bytes)`);
-    return { filePath, title: safeTitle, ext };
   });
+
+  const files = fs.readdirSync(TEMP_DIR).filter(f => f.startsWith(`${jobId}_`));
+  if (!files.length) {
+    throw new Error('yt-dlp completed but no output file found in temp dir');
+  }
+
+  const picked = files
+    .map(f => ({ name: f, size: fs.statSync(path.join(TEMP_DIR, f)).size }))
+    .sort((a, b) => b.size - a.size)[0];
+
+  const filePath = path.join(TEMP_DIR, picked.name);
+  const ext = path.extname(picked.name).slice(1);
+
+  logger.info(`yt-dlp downloaded: ${filePath} (${picked.size} bytes)`);
+  return { filePath, title: safeTitle, ext };
 }

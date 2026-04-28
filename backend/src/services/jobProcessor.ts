@@ -1,7 +1,7 @@
 import { v4 as uuid } from 'uuid';
 import path from 'path';
 import fs from 'fs';
-import type { ConversionJob, JobStatus } from '@transmux/shared';
+import type { ConversionJob, JobStatus } from '../shared/src/types';
 import { logger, logJobComplete, logJobFailed, logJobProgress } from '../utils/logger';
 import { TEMP_DIR, FILE_EXPIRY_HOURS } from '../utils/constants';
 import { downloadUrl, sanitiseTitle } from './ytdlp';
@@ -70,10 +70,11 @@ function getQualityOptions(mode: string, quality: string, userOptions: any): any
 export async function processConversionJob(jobData: ConversionJob): Promise<ConversionJob> {
   const { id: jobId, sourceUrl, mode, outputFormat, options } = jobData;
 
-  logger.info(`Processing job ${jobId}: ${mode} → ${outputFormat}`);
+  logger.info(`Processing job ${jobId}: ${mode} -> ${outputFormat}`);
 
   let inputPath: string | null = null;
   let tempDownloadPath: string | null = null;
+  let mediaTitle = 'Media';
 
   try {
     updateJobStatus(jobId, 'downloading', 5);
@@ -107,7 +108,7 @@ export async function processConversionJob(jobData: ConversionJob): Promise<Conv
     if (!isCloudinaryConfigured()) {
       logger.warn('Cloudinary not configured, skipping upload');
       updateJobStatus(jobId, 'completed', 100);
-      return getJobRecord(jobId) as ConversionJob;
+      return getJobRecord(jobId) as Promise<ConversionJob>;
     }
 
     const resourceType = getResourceType(outputFormat as string);
@@ -125,7 +126,7 @@ export async function processConversionJob(jobData: ConversionJob): Promise<Conv
       progress: 100,
       downloadUrl: uploadResult.secureUrl,
       cloudinaryPublicId: uploadResult.publicId,
-      outputName: `${sanitiseTitle(dl.title)}.${outputFormat}`,
+      outputName: `${sanitiseTitle(mediaTitle)}.${outputFormat}`,
       outputSize: uploadResult.bytes,
     };
 
@@ -155,8 +156,6 @@ export async function processConversionJob(jobData: ConversionJob): Promise<Conv
     }
   }
 }
-
-let mediaTitle = 'Media';
 
 async function updateJobStatus(jobId: string, status: JobStatus, progress: number): Promise<void> {
   await updateJobRecord(jobId, { status, progress });
