@@ -68,6 +68,10 @@ export async function checkHealth() {
   return request<{ status: string; ffmpeg: boolean; ytdlp: boolean }>('/api/health');
 }
 
+export async function fetchUrlInfo(url: string) {
+  return request<{ metadata: any }>(`/api/metadata?url=${encodeURIComponent(url)}`);
+}
+
 export type ConversionStatus = 'queued' | 'downloading' | 'converting' | 'uploading' | 'completed' | 'failed' | 'expired';
 
 export interface ActiveJob {

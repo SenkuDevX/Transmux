@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Download, Clock, AlertCircle, CheckCircle, Loader2, XCircle } from 'lucide-react';
 import type { ActiveJob } from '@/lib/api';
-import { getDownloadUrl, getTimeRemaining } from '@/lib/api';
+import { getDownloadUrl } from '@/lib/api';
+import { getTimeRemaining } from '@/lib/store';
 
 const STATUS_CONFIG = {
   queued: {
