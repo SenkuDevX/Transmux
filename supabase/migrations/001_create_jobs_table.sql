@@ -7,6 +7,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE IF NOT EXISTS jobs (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   job_id TEXT UNIQUE NOT NULL,
+  mode TEXT NOT NULL DEFAULT 'video',
   source_url TEXT,
   format TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'queued',

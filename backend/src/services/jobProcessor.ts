@@ -34,6 +34,7 @@ export async function createConversionJob(
   const job: ConversionJob = {
     id: jobId,
     status: 'queued',
+    mode: mode as ConversionMode,
     sourceUrl: url,
     inputName: mediaTitle,
     inputSize: 0,

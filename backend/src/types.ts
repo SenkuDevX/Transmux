@@ -25,6 +25,7 @@ export interface ConversionJob {
 export type OutputFormat = 'mp3' | 'wav' | 'ogg' | 'm4a' | 'aac' | 'flac' | 'opus' | 'aiff' | 'mp4' | 'mkv' | 'webm' | 'mov' | 'avi' | 'flv' | 'm4v' | '3gp' | 'ts' | 'srt' | 'vtt' | 'ass' | 'sub' | 'png' | 'jpg' | 'webp' | 'gif';
 
 export interface UrlMetadata {
+  url?: string;
   title?: string;
   duration?: number;
   width?: number;

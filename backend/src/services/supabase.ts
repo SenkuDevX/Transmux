@@ -109,6 +109,7 @@ export async function createJobRecord(job: ConversionJob): Promise<void> {
     const { error } = await client.from('jobs').insert([{
       id: job.id,
       job_id: job.id,
+      mode: job.mode,
       source_url: job.sourceUrl || null,
       format: job.outputFormat,
       status: job.status,
@@ -169,6 +170,7 @@ export async function getJobRecord(jobId: string): Promise<ConversionJob | null>
     return {
       id: (data as any).job_id,
       status: (data as any).status as JobStatus,
+      mode: (data as any).mode || 'video',
       sourceUrl: (data as any).source_url,
       inputName: (data as any).source_url || 'Unknown',
       inputSize: 0,
