@@ -13,6 +13,7 @@ import { statusRoutes } from './routes/status';
 import { downloadRoutes } from './routes/download';
 import { cleanupRoutes } from './routes/cleanup';
 import { healthRoutes } from './routes/health';
+import { metadataRoutes } from './routes/metadata';
 import { registerWsHandlers } from './services/websocket';
 import { initializeQueue } from './services/queue';
 import { startCleanupScheduler } from './services/cleanupWorker';
@@ -68,6 +69,7 @@ app.use('/api/convert', convertRoutes);
 app.use('/api/status', statusRoutes);
 app.use('/api/download', downloadRoutes);
 app.use('/api/admin', cleanupRoutes);
+app.use('/api/metadata', metadataRoutes);
 
 app.use(errorHandler);
 
