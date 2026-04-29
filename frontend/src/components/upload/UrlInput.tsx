@@ -17,23 +17,11 @@ export default function UrlInput() {
     setLoading(true);
     try {
       const { metadata } = await fetchUrlInfo(urlInput.trim());
-      setUrlMetadata(metadata);
+      setUrlMetadata({ ...metadata, url: urlInput.trim() });
       toast.success(`Found: ${(metadata as any).title || 'Media'}`);
-    } catch (err: any) {
-      // Demo mode fallback
-      const fakeMeta = {
-        url: urlInput,
-        title: 'Sample Media File',
-        duration: 272,
-        thumbnail: null,
-        availableFormats: [
-          { formatId: '22', ext: 'mp4', resolution: '1280x720', label: '720p MP4' },
-          { formatId: '18', ext: 'mp4', resolution: '640x360', label: '360p MP4' },
-          { formatId: '140', ext: 'm4a', resolution: null, label: 'Audio 128k' },
-        ],
-      };
-      setUrlMetadata(fakeMeta);
-      toast.info('Demo: showing sample metadata (backend not connected)');
+    } catch {
+      // If metadata fetch fails, just store the URL directly - conversion can still work
+      setUrlMetadata({ url: urlInput.trim(), title: urlInput.split('/').pop() || 'Media' });
     } finally {
       setLoading(false);
     }
