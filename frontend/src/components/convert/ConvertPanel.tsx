@@ -11,9 +11,10 @@ import SettingsPanel from '../settings/SettingsPanel';
 import JobProgress from '../progress/JobProgress';
 import FeatureCards from './FeatureCards';
 import { useAppStore } from '@/lib/store';
+import { createUrlJob, createConversionJob } from '@/lib/api';
 
 export default function ConvertPanel() {
-  const { files, urlMetadata, settings, mode, addJob, clearFiles } = useAppStore();
+  const { files, urlMetadata, settings, mode, addJob, clearFiles, setUrlMetadata, setUrlInput } = useAppStore();
   const [converting, setConverting] = useState(false);
 
   const hasInput = files.length > 0 || urlMetadata !== null;
@@ -30,20 +31,47 @@ export default function ConvertPanel() {
 
     setConverting(true);
     try {
-      const mockJob = {
-        jobId: `job-${Date.now()}`,
-        status: 'queued' as const,
-        progress: 0,
-        inputName: files.length > 0 ? files[0].file.name : (urlMetadata as any)?.url || 'URL',
-        outputFormat: settings.outputFormat,
-      };
-      addJob(mockJob);
-      toast.success('Job queued!');
-      clearFiles();
+      if (urlMetadata) {
+        const sourceUrl = (urlMetadata as any).url;
+        const result = await createUrlJob({
+          sourceUrl,
+          mode,
+          outputFormat: settings.outputFormat,
+          options: { quality: settings.quality, ...settings.options },
+        });
+        addJob({
+          jobId: result.jobId,
+          status: 'queued',
+          progress: 0,
+          inputName: sourceUrl.split('/').pop() || 'Media',
+          outputFormat: settings.outputFormat,
+        });
+        toast.success('Conversion started!');
+        setUrlMetadata(null);
+        setUrlInput('');
+      } else if (files.length > 0) {
+        for (const fileItem of files) {
+          const result = await createConversionJob({
+            url: 'file://' + fileItem.file.name,
+            format: settings.outputFormat,
+            quality: settings.quality,
+            mode,
+          });
+          addJob({
+            jobId: result.jobId,
+            status: 'queued',
+            progress: 0,
+            inputName: fileItem.file.name,
+            outputFormat: settings.outputFormat,
+          });
+        }
+        toast.success(`${files.length} job(s) queued!`);
+        clearFiles();
+      }
     } catch (err: any) {
       const isNetworkErr = err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError');
       if (isNetworkErr) {
-        toast.info('Backend not reachable. Make sure the backend is running on port 3001.');
+        toast.error('Backend not reachable. Check your connection.');
       } else {
         toast.error(err.message || 'Conversion failed');
       }
