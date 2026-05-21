@@ -5,6 +5,6 @@
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "env": {
-    "VITE_API_URL": "@backend_url"
+    "VITE_API_URL": "https://KurbaniBoy-transmux.hf.space"
   }
 }
