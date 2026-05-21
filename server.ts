@@ -35,6 +35,16 @@ const tmpJobsDir = path.join(DATA_ROOT, "jobs");
 fs.mkdirSync(tmpJobsDir, { recursive: true });
 const COOKIES_FILE = path.join(DATA_ROOT, "cookies.txt");
 
+// On startup, write YOUTUBE_COOKIES env var to cookies file (if set)
+if (process.env.YOUTUBE_COOKIES) {
+  try {
+    fs.writeFileSync(COOKIES_FILE, process.env.YOUTUBE_COOKIES, "utf-8");
+    console.log(`[Cookies] Loaded from YOUTUBE_COOKIES env var (${process.env.YOUTUBE_COOKIES.length} bytes)`);
+  } catch (err: any) {
+    console.error(`[Cookies] Failed to write cookies from env var: ${err.message}`);
+  }
+}
+
 // Setup Multer discrete storage per job
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
