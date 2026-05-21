@@ -1,3 +1,12 @@
+---
+title: Transmux — Project Saga
+emoji: 🎵
+colorFrom: indigo
+colorTo: violet
+sdk: docker
+pinned: false
+---
+
 # Transmux — Project Saga
 
 Convert YouTube videos, SoundCloud tracks, or local media files into any format you need. Embed cover art, trim segments, and publish results to a live showroom gallery.
