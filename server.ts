@@ -379,6 +379,8 @@ app.post("/api/url/metadata", async (req, res) => {
     "-J",
     "--no-playlist",
     "--playlist-items", "1",
+    "--extractor-args", "youtube:player_client=android",
+    "--user-agent", "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.83 Mobile Safari/537.36",
     url,
   ]);
 
@@ -520,6 +522,8 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
         "--write-thumbnail",
         "--convert-thumbnails", "jpg",
         "--no-playlist",
+        "--extractor-args", "youtube:player_client=android",
+        "--user-agent", "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.83 Mobile Safari/537.36",
         url,
       ];
 
