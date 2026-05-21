@@ -2,7 +2,7 @@
 title: Transmux — Project Saga
 emoji: 🎵
 colorFrom: indigo
-colorTo: violet
+colorTo: purple
 sdk: docker
 pinned: false
 ---
