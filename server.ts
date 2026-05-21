@@ -33,6 +33,7 @@ app.use((req, res, next) => {
 const DATA_ROOT = fs.existsSync("/data") ? "/data" : path.join(process.cwd(), "tmp");
 const tmpJobsDir = path.join(DATA_ROOT, "jobs");
 fs.mkdirSync(tmpJobsDir, { recursive: true });
+const COOKIES_FILE = path.join(DATA_ROOT, "cookies.txt");
 
 // Setup Multer discrete storage per job
 const storage = multer.diskStorage({
@@ -275,6 +276,43 @@ app.get("/api/health", (req, res) => {
   });
 });
 
+// Helper: Add --cookies arg to yt-dlp args array if cookies file exists
+function addCookiesArg(args: string[]): string[] {
+  if (fs.existsSync(COOKIES_FILE)) {
+    return [...args, "--cookies", COOKIES_FILE];
+  }
+  return args;
+}
+
+// 1b. Cookies management
+app.post("/api/cookies", (req, res) => {
+  const { cookies } = req.body;
+  if (!cookies || typeof cookies !== "string") {
+    return res.status(400).json({ success: false, error: "Cookies text is required" });
+  }
+  try {
+    fs.writeFileSync(COOKIES_FILE, cookies, "utf-8");
+    console.log(`[Cookies] Saved cookies file (${cookies.length} bytes)`);
+    res.json({ success: true, message: "Cookies saved. They will be used for YouTube requests." });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: `Failed to save cookies: ${err.message}` });
+  }
+});
+
+app.get("/api/cookies", (req, res) => {
+  const exists = fs.existsSync(COOKIES_FILE);
+  res.json({ success: true, hasCookies: exists });
+});
+
+app.delete("/api/cookies", (req, res) => {
+  try {
+    if (fs.existsSync(COOKIES_FILE)) fs.unlinkSync(COOKIES_FILE);
+    res.json({ success: true, message: "Cookies removed." });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // 2. Local File Upload
 app.post("/api/upload", upload.single("file"), async (req, res) => {
   try {
@@ -375,14 +413,14 @@ app.post("/api/url/metadata", async (req, res) => {
   }
 
   // Spawn yt-dlp to inspect format offerings
-  const ytDlp = spawn("yt-dlp", [
+  const ytDlp = spawn("yt-dlp", addCookiesArg([
     "-J",
     "--no-playlist",
     "--playlist-items", "1",
     "--extractor-args", "youtube:player_client=android,tv",
     "--user-agent", "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.83 Mobile Safari/537.36",
     url,
-  ]);
+  ]));
 
   let stdout = "";
   let stderr = "";
@@ -516,7 +554,7 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
         : "best";
 
       // Spawn yt-dlp to download selected stream (with thumbnail)
-      const ytdlpDownloadArgs = [
+      const ytdlpDownloadArgs = addCookiesArg([
         "-f", formatSelection,
         "-o", path.join(jobDir, "input.%(ext)s"),
         "--write-thumbnail",
@@ -525,7 +563,7 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
         "--extractor-args", "youtube:player_client=android,tv",
         "--user-agent", "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.83 Mobile Safari/537.36",
         url,
-      ];
+      ]);
 
       const ytDlp = spawn("yt-dlp", ytdlpDownloadArgs);
 
