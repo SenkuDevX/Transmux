@@ -284,8 +284,19 @@ function addCookiesArg(args: string[]): string[] {
   return args;
 }
 
-// 1b. Cookies management
-app.post("/api/cookies", (req, res) => {
+// 1b. Cookies management (admin-only — uses ADMIN_KEY env var)
+const ADMIN_KEY = process.env.ADMIN_KEY;
+
+function requireAdmin(req: any, res: any, next: any) {
+  const auth = req.headers.authorization;
+  if (!ADMIN_KEY) return res.status(500).json({ success: false, error: "ADMIN_KEY not set on server" });
+  if (!auth || auth !== `Bearer ${ADMIN_KEY}`) {
+    return res.status(403).json({ success: false, error: "Forbidden. Provide Authorization: Bearer <ADMIN_KEY> header." });
+  }
+  next();
+}
+
+app.post("/api/cookies", requireAdmin, (req, res) => {
   const { cookies } = req.body;
   if (!cookies || typeof cookies !== "string") {
     return res.status(400).json({ success: false, error: "Cookies text is required" });
@@ -293,7 +304,7 @@ app.post("/api/cookies", (req, res) => {
   try {
     fs.writeFileSync(COOKIES_FILE, cookies, "utf-8");
     console.log(`[Cookies] Saved cookies file (${cookies.length} bytes)`);
-    res.json({ success: true, message: "Cookies saved. They will be used for YouTube requests." });
+    res.json({ success: true, message: "Cookies saved. Stored permanently in /data — survive all restarts." });
   } catch (err: any) {
     res.status(500).json({ success: false, error: `Failed to save cookies: ${err.message}` });
   }
@@ -302,15 +313,6 @@ app.post("/api/cookies", (req, res) => {
 app.get("/api/cookies", (req, res) => {
   const exists = fs.existsSync(COOKIES_FILE);
   res.json({ success: true, hasCookies: exists });
-});
-
-app.delete("/api/cookies", (req, res) => {
-  try {
-    if (fs.existsSync(COOKIES_FILE)) fs.unlinkSync(COOKIES_FILE);
-    res.json({ success: true, message: "Cookies removed." });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
 });
 
 // 2. Local File Upload
