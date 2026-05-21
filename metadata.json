@@ -1,0 +1,6 @@
+{
+  "name": "Transmux",
+  "description": "An enterprise-grade, open-source media conversion, remuxing, and URL extraction platform powered by FFmpeg and yt-dlp.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
