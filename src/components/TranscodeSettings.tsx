@@ -245,6 +245,12 @@ export default function TranscodeSettings({
         <h2 className="text-base font-bold text-slate-900 dark:text-white font-sans">Conversion Parameters & Settings</h2>
       </div>
 
+      {/* Troubleshooting notice */}
+      <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 rounded-xl px-4 py-3 text-xs text-amber-800 dark:text-amber-400 font-medium flex items-start gap-2">
+        <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+        <span>If the output doesn't work as expected, try changing parameters like resolution, video/audio codec, or container format.</span>
+      </div>
+
       {/* Target Media Type Tabs */}
       <div id="settings-type-tabs" className="grid grid-cols-2 p-1 bg-slate-100 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800">
         <button
