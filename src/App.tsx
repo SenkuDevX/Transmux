@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Layers, HardDrive, Globe, Info, Github, HelpCircle, Activity, Play, AlertCircle, CheckCircle2, X, Cpu, Shield, Sparkles, ExternalLink } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import Header from "./components/Header";
@@ -9,6 +9,7 @@ import MetadataPreview from "./components/MetadataPreview";
 import TranscodeSettings from "./components/TranscodeSettings";
 import ProgressCard from "./components/ProgressCard";
 import HistoryList from "./components/HistoryList";
+import TipsCard from "./components/TipsCard";
 
 import SkeletonLoader from "./components/SkeletonLoader";
 import PreviewPopup from "./components/PreviewPopup";
@@ -58,6 +59,7 @@ export default function App() {
   // Conversion engine track
   const [activeJob, setActiveJob] = useState<Job | null>(null);
   const [pollingId, setPollingId] = useState<NodeJS.Timeout | null>(null);
+  const [showStallWarning, setShowStallWarning] = useState(false);
 
   // Journal listing
   const [history, setHistory] = useState<ConversionHistoryItem[]>([]);
@@ -306,6 +308,9 @@ export default function App() {
   };
 
   // 6. Poll for job state updates on the server
+  const stallTimerRef = useRef<number>(0);
+  const lastProgressRef = useRef<{ progress: number; status: string; time: number }>({ progress: 0, status: "", time: Date.now() });
+  const STALL_THRESHOLD = 30; // seconds
   const startPolling = (jobToPoll: string) => {
     if (pollingId) clearInterval(pollingId);
 
@@ -316,8 +321,23 @@ export default function App() {
           const data = await response.json();
           if (data.success) {
             setActiveJob(data.job);
+
+            // Stall detection
+            const job = data.job;
+            if (job.status === "queued" || job.status === "processing") {
+              const prev = lastProgressRef.current;
+              if (job.progress !== prev.progress || job.status !== prev.status) {
+                lastProgressRef.current = { progress: job.progress, status: job.status, time: Date.now() };
+                setShowStallWarning(false);
+              } else if (Date.now() - prev.time > STALL_THRESHOLD * 1000) {
+                setShowStallWarning(true);
+              }
+            } else {
+              setShowStallWarning(false);
+              lastProgressRef.current = { progress: 0, status: "", time: Date.now() };
+            }
             
-            if (data.job.status === "completed") {
+            if (job.status === "completed") {
               clearInterval(poll);
               setPollingId(null);
 
@@ -505,11 +525,19 @@ export default function App() {
 
             {/* 4. Active Job progress screen */}
             {activeJob && (
-              <ProgressCard
-                job={activeJob}
-                onReset={handleReset}
-                onPreview={(id, name, size) => setPreviewMedia({ id, name, size, isPublished: false })}
-              />
+              <div className="space-y-3">
+                <ProgressCard
+                  job={activeJob}
+                  onReset={handleReset}
+                  onPreview={(id, name, size) => setPreviewMedia({ id, name, size, isPublished: false })}
+                />
+                {showStallWarning && (
+                  <div className="bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-center">
+                    <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">Server seems slow — please wait</p>
+                    <p className="text-[10px] text-amber-600 dark:text-amber-500 mt-0.5">The backend is still processing. You can wait or cancel and retry.</p>
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
@@ -525,6 +553,9 @@ export default function App() {
                 </p>
               </div>
             )}
+
+            {/* Tips & Knowledge */}
+            <TipsCard />
 
             {/* Active History log column card */}
             <HistoryList

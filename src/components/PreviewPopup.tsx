@@ -38,25 +38,25 @@ export default function PreviewPopup({ mediaId, filename, size, isPublished = fa
 
   const [barHeights, setBarHeights] = useState<number[]>(Array(16).fill(12));
   const animationRef = useRef<number | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
 
   useEffect(() => {
     let frameId: number;
-    let lastTime = performance.now();
-    const update = (now: number) => {
-      const dt = (now - lastTime) * 0.016;
-      lastTime = now;
-      if (isPlaying) {
-        const t = Date.now() * 0.022;
-        setBarHeights(
-          Array.from({ length: 16 }, (_, i) => {
-            const baseWave = Math.sin(t * 1.4 + i * 0.95) * 16;
-            const detailWave = Math.cos(t * 3.3 - i * 0.75) * 12;
-            const subBass = Math.sin(t * 0.6 + i * 0.3) * 14;
-            const wave = 40 + baseWave + detailWave + subBass;
-            const jitter = Math.random() * 18 - 9;
-            return Math.max(8, Math.min(88, wave + jitter));
-          })
-        );
+    const update = () => {
+      if (isPlaying && analyserRef.current) {
+        const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+        analyserRef.current.getByteFrequencyData(dataArray);
+        const binsPerBar = Math.floor(dataArray.length / 16);
+        const heights = Array.from({ length: 16 }, (_, i) => {
+          let sum = 0;
+          for (let j = 0; j < binsPerBar; j++) {
+            sum += dataArray[i * binsPerBar + j];
+          }
+          const avg = sum / binsPerBar;
+          return Math.max(8, (avg / 255) * 78 + 4);
+        });
+        setBarHeights(heights);
       } else {
         setBarHeights((prev) => {
           if (prev.every((h) => Math.abs(h - 12) < 0.5)) {
@@ -102,8 +102,23 @@ export default function PreviewPopup({ mediaId, filename, size, isPublished = fa
       else videoRef.current.play();
       setIsPlaying(!isPlaying);
     } else if (isAudio && audioRef.current) {
-      if (isPlaying) audioRef.current.pause();
-      else audioRef.current.play();
+      if (isPlaying) {
+        audioRef.current.pause();
+      } else {
+        if (!audioCtxRef.current) {
+          const ctx = new AudioContext();
+          const analyser = ctx.createAnalyser();
+          analyser.fftSize = 256;
+          const source = ctx.createMediaElementSource(audioRef.current);
+          source.connect(analyser);
+          analyser.connect(ctx.destination);
+          audioCtxRef.current = ctx;
+          analyserRef.current = analyser;
+        } else if (audioCtxRef.current.state === "suspended") {
+          audioCtxRef.current.resume();
+        }
+        audioRef.current.play();
+      }
       setIsPlaying(!isPlaying);
     }
   };

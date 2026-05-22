@@ -3,46 +3,46 @@ import { BookOpen, ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
 
 export const EDUCATIONAL_TIPS = [
   {
-    title: "MKV Matroska Shell",
-    tag: "Nesting Star",
-    color: "from-sky-500 to-indigo-500",
-    text: "Named after Russian stacking dolls (Matryoshka). MKV is an open-standard extensible container capable of holding unlimited video, audio, multiple subtitle streams (like SRT or premium ASS files), menus, and chapters in one bundle."
+    title: "Browser Extension Helper",
+    tag: "Cookies Sync",
+    color: "from-green-500 to-emerald-500",
+    text: "Install the Transmux Chrome extension to automatically send fresh YouTube cookies when needed. It securely extracts cookies from your logged-in browser session and delivers them to the backend — no manual copying required."
   },
   {
-    title: "MP4 Web Compliance",
-    tag: "Streaming Standard",
-    color: "from-indigo-500 to-purple-500",
-    text: "Standardized by ISO based on standard Apple QuickTime specifications. While constrained for complex multi-language audio tracks, it is the absolute king of network direct playback compatibility across Safari, Chrome, iOS, and game consoles."
+    title: "Downloading Media",
+    tag: "Stream Capture",
+    color: "from-blue-500 to-indigo-500",
+    text: "Paste any supported URL to analyze available formats. Transmux downloads the original stream, then re-encodes it to your chosen output format using FFmpeg. For best quality, select 'Best Available' and let the system choose."
   },
   {
-    title: "Audio Encoding Epochs",
-    tag: "AAC vs MP3",
+    title: "Uploading to Gallery",
+    tag: "Community Share",
     color: "from-purple-500 to-pink-500",
-    text: "MP3 launched standard digital audiophiles globally, but compresses poorly at low spatial densities. Advanced Audio Coding (AAC) succeeded MP3, with optimized psychoacoustic filtering giving superior acoustic preservation at identical bitrates."
+    text: "After conversion, you can publish your media to the public gallery. Published files get a shareable link and appear in the Panoramic Showroom feed for others to preview."
   },
   {
-    title: "Remuxing vs Transcoding",
-    tag: "Zero Quality Loss",
-    color: "from-emerald-500 to-teal-500",
-    text: "Selecting 'Copy' or 'keep' options triggers standard zero-copy Remuxing (called Stream Copy). Instead of exhausting CPU re-writing pixels, it extracts intact content streams and updates the outer wrapper metadata index in milliseconds."
-  },
-  {
-    title: "Studio-Grade Lossless Audio",
-    tag: "FLAC & WAV archives",
-    color: "from-pink-500 to-rose-500",
-    text: "Swapping any multi-track video stream directly using FLAC/WAV audio tags handles extreme demuxing. It strips visual layers and structures uncompressed acoustic waveform segments at master-recording preservation accuracy levels."
-  },
-  {
-    title: "The Genius of FFmpeg",
-    tag: "Universal Engine",
+    title: "Meet the Creator",
+    tag: "Open Source",
     color: "from-amber-500 to-orange-500",
-    text: "Founded by French programmer Fabrice Bellard in 2000. Under the hood of AI Studio's Transmux lies this legendary hyper-optimized software suite. Standard web platforms and digital televisions run FFmpeg on billions of cores daily."
+    text: "Transmux (Project Saga) was built by SenkuDevX as an open-source media conversion platform. The entire codebase is available on GitHub — contributions, issues, and forks are welcome."
   },
   {
-    title: "Advanced Subtitles Styling",
-    tag: "SRT vs SSA/ASS",
-    color: "from-cyan-500 to-blue-500",
-    text: "While SRT represents simple text paragraphs with time markers, advanced ASS/SSA (SubStation Alpha) specifications allow exact dynamic typesetting placement, custom font overrides, colored karaoke fades, and animated vectors."
+    title: "Download Speeds",
+    tag: "Performance",
+    color: "from-cyan-500 to-teal-500",
+    text: "Download speed depends on the source server (YouTube, etc.) and your connection. Transmux uses yt-dlp with curl_cffi impersonation to maximize throughput. Large 4K videos may take several minutes."
+  },
+  {
+    title: "Supported Sources",
+    tag: "Compatibility",
+    color: "from-violet-500 to-fuchsia-500",
+    text: "Transmux supports YouTube, along with hundreds of other sites via yt-dlp. Paste any supported video URL to get started. File uploads are also supported for local media conversion."
+  },
+  {
+    title: "Format Guide",
+    tag: "Codec Tips",
+    color: "from-rose-500 to-red-500",
+    text: "MP4 with H.264 video + AAC audio offers the best compatibility across devices. MKV supports advanced subtitle embedding. For audio-only, Opus gives the best quality at low bitrates, while MP3 is universally compatible."
   }
 ];
 

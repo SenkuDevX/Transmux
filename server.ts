@@ -336,8 +336,8 @@ app.get("/api/health", (req, res) => {
 });
 
 // Helper: spawn yt-dlp and capture output, with retry on stale cookies or proxy fallback
-const YTDLP_BASE = ["--impersonate", "Chrome-136"];
-const META_EXTRACTOR = "youtube:player_client=web;skip=webpage,js";
+const YTDLP_BASE = ["--impersonate", "Chrome-136", "--no-check-formats"];
+const META_EXTRACTOR = "youtube:player_client=web_embedded;skip=webpage,js";
 const DL_EXTRACTOR = "youtube:player_client=web;skip=webpage,js";
 const DL_EXTRACTOR_NO_COOKIES = "youtube:player_client=android;skip=webpage,js";
 
@@ -729,6 +729,7 @@ app.post("/api/convert/playlist", async (req, res) => {
         "-o", path.join(itemDir, `input.%(ext)s`),
         "--write-subs", "--write-auto-subs", "--sub-langs", "all,-live_chat",
         "--embed-subs",
+        "--convert-subs", "srt",
         "--no-playlist",
         "--extractor-args", DL_EXTRACTOR,
         entry.url,
@@ -884,6 +885,47 @@ app.post("/api/cookies/:jobId", async (req, res) => {
   fs.writeFileSync(cookiesPath, cookies);
   console.log(`[Cookies] Received fresh cookies for job ${jobId} (${cookies.length} bytes)`);
 
+  // Re-extract metadata with fresh cookies to check if better formats are now available
+  let upgradedFormat = false;
+  let newFormats: any[] | null = null;
+  if (job._url) {
+    try {
+      const metaResult = await execYtDlp(["-J", "--no-playlist", "--playlist-items", "1",
+        "--cookies", cookiesPath,
+        "--extractor-args", META_EXTRACTOR,
+        job._url]);
+      if (metaResult.code === 0) {
+        const data = JSON.parse(metaResult.stdout);
+        const formats = (data.formats || [])
+          .filter((f: any) => f.url || f.manifest_url)
+          .map((f: any) => ({
+            formatId: f.format_id,
+            ext: f.ext,
+            resolution: f.height ? `${f.height}p` : (f.format_note || "audio"),
+            filesize: f.filesize || f.filesize_approx || 0,
+            note: f.format_note || "",
+          }));
+        const highestRes = formats
+          .map((f: any) => {
+            const match = f.resolution?.match(/(\d+)p/);
+            return match ? parseInt(match[1], 10) : 0;
+          })
+          .reduce((max, v) => Math.max(max, v), 0);
+        if (highestRes > 360) {
+          upgradedFormat = true;
+          newFormats = formats;
+          // Upgrade to best available format
+          if (job._settings) {
+            job._settings.selectedFormatId = "bestvideo+bestaudio/best";
+          }
+          console.log(`[Job ${jobId}] Re-extracted metadata with fresh cookies: found formats up to ${highestRes}p`);
+        }
+      }
+    } catch (e: any) {
+      console.warn(`[Job ${jobId}] Metadata re-extraction failed: ${e.message?.slice(0, 100)}`);
+    }
+  }
+
   // Resume job if waiting for cookies
   if (job.waitingCookies && job.status === "waiting_cookies") {
     job.cookieRetryCount = (job.cookieRetryCount || 0) + 1;
@@ -891,7 +933,7 @@ app.post("/api/cookies/:jobId", async (req, res) => {
     processMediaJob(job, job._settings, job._url);
   }
 
-  res.json({ success: true });
+  res.json({ success: true, upgradedFormat, formats: upgradedFormat ? newFormats : undefined });
 });
 
 // Helper: Process job lifecycle in background
@@ -931,6 +973,7 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
           "--convert-thumbnails", "jpg",
           "--write-subs", "--write-auto-subs", "--sub-langs", "all,-live_chat",
           "--embed-subs",
+          "--convert-subs", "srt",
           "--no-playlist",
           url,
         ];
@@ -1069,26 +1112,52 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
     // Attempt 1: Download from metadata thumbnail URL (skip if yt-dlp already wrote one)
     if (!thumbnailDownloaded && settings.thumbnailUrl) {
       try {
-        console.log(`[CoverArt] Downloading cover artwork from: ${settings.thumbnailUrl}`);
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000);
-        const resImg = await fetch(settings.thumbnailUrl, {
-          signal: controller.signal,
-          headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-          },
-        });
-        clearTimeout(timeoutId);
-        if (resImg.ok) {
-          const buffer = await resImg.arrayBuffer();
-          if (buffer.byteLength > 100) {
-            fs.writeFileSync(thumbnailPath, Buffer.from(buffer));
-            thumbnailDownloaded = true;
-            console.log(`[CoverArt] Successfully stored artwork onto disk (${buffer.byteLength} bytes).`);
+        // Try high-res YouTube thumbnail first
+        const ytMatch = settings.thumbnailUrl.match(/(?:youtube\.com|youtu\.be|i\.ytimg\.com).*?(?:\/vi\/|\/vi_webp\/)([a-zA-Z0-9_-]{11})/);
+        if (ytMatch) {
+          const videoId = ytMatch[1];
+          for (const res of ["maxresdefault", "hqdefault", "sddefault"]) {
+            const hqUrl = `https://i.ytimg.com/vi/${videoId}/${res}.jpg`;
+            try {
+              const ctrl = new AbortController();
+              const tid = setTimeout(() => ctrl.abort(), 5000);
+              const hr = await fetch(hqUrl, { signal: ctrl.signal });
+              clearTimeout(tid);
+              if (hr.ok) {
+                const buf = await hr.arrayBuffer();
+                if (buf.byteLength > 100) {
+                  fs.writeFileSync(thumbnailPath, Buffer.from(buf));
+                  thumbnailDownloaded = true;
+                  console.log(`[CoverArt] Downloaded high-res thumbnail: ${res}.jpg (${buf.byteLength} bytes)`);
+                  break;
+                }
+              }
+            } catch { /* try next resolution */ }
           }
-        } else {
-          console.warn(`[CoverArt] URL returned status ${resImg.status}`);
+        }
+        // Fall back to the provided thumbnailUrl if high-res failed
+        if (!thumbnailDownloaded) {
+          console.log(`[CoverArt] Downloading cover artwork from: ${settings.thumbnailUrl}`);
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000);
+          const resImg = await fetch(settings.thumbnailUrl, {
+            signal: controller.signal,
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+            },
+          });
+          clearTimeout(timeoutId);
+          if (resImg.ok) {
+            const buffer = await resImg.arrayBuffer();
+            if (buffer.byteLength > 100) {
+              fs.writeFileSync(thumbnailPath, Buffer.from(buffer));
+              thumbnailDownloaded = true;
+              console.log(`[CoverArt] Successfully stored artwork onto disk (${buffer.byteLength} bytes).`);
+            }
+          } else {
+            console.warn(`[CoverArt] URL returned status ${resImg.status}`);
+          }
         }
       } catch (err: any) {
         console.warn("[CoverArt] URL download failed:", err?.message || err);
