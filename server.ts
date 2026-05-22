@@ -325,9 +325,11 @@ function addCookiesArg(args: string[]): string[] {
 }
 
 // Helper: spawn yt-dlp and capture output, with retry on stale cookies or proxy fallback
+const YTDLP_BASE = ["--impersonate", "chrome"];
+
 function execYtDlp(args: string[]): Promise<{ stdout: string; stderr: string; code: number }> {
   return new Promise((resolve) => {
-    const proc = spawn("yt-dlp", args);
+    const proc = spawn("yt-dlp", [...YTDLP_BASE, ...args]);
     let stdout = "", stderr = "";
     proc.stdout.on("data", (d: Buffer) => { stdout += d.toString(); });
     proc.stderr.on("data", (d: Buffer) => { stderr += d.toString(); });
@@ -831,14 +833,14 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
 
       // Try: with cookies → without cookies if stale → through proxy if configured
       const downloadAttempts: string[][] = [
-        addCookiesArg([...baseDownloadArgs]),
+        addCookiesArg([...YTDLP_BASE, ...baseDownloadArgs]),
       ];
 
       if (fs.existsSync(COOKIES_FILE)) {
-        downloadAttempts.push([...baseDownloadArgs]);
+        downloadAttempts.push([...YTDLP_BASE, ...baseDownloadArgs]);
       }
       if (PROXY_URL) {
-        downloadAttempts.push([...baseDownloadArgs, "--proxy", PROXY_URL]);
+        downloadAttempts.push([...YTDLP_BASE, ...baseDownloadArgs, "--proxy", PROXY_URL]);
       }
 
       let lastError: Error | null = null;
