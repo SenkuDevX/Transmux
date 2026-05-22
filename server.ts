@@ -325,7 +325,7 @@ function addCookiesArg(args: string[]): string[] {
 }
 
 // Helper: spawn yt-dlp and capture output, with retry on stale cookies or proxy fallback
-const YTDLP_BASE = ["--impersonate", "chrome"];
+const YTDLP_BASE = ["--no-check-certificates", "--impersonate", "chrome"];
 
 function execYtDlp(args: string[]): Promise<{ stdout: string; stderr: string; code: number }> {
   return new Promise((resolve) => {
