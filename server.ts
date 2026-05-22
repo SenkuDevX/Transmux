@@ -234,6 +234,9 @@ function formatYtdlpError(stderr: string): string {
   if (lower.includes("unsupported url")) {
     return "The URL platform or media stream format is unsupported. Ensure you paste a supported link (e.g. YouTube, Vimeo, Soundcloud).";
   }
+  if (lower.includes("not a bot") || lower.includes("confirm you are not a bot") || lower.includes("confirm you're not a bot")) {
+    return "YouTube blocked the request — this server IP has been flagged. Use the extension to send real browser cookies or try again later.";
+  }
   if (lower.includes("video unavailable") || lower.includes("private video")) {
     return "This video is unavailable. It may have been deleted, set to private, or region-restricted by the publisher.";
   }
@@ -539,10 +542,12 @@ app.post("/api/url/metadata", async (req, res) => {
 
   // Spawn yt-dlp to inspect format offerings
   // Strategy: web (no cookies) → web (with cookies) → tv_embedded (with cookies)
+  let lastStderr = "";
   async function tryMetadata(clientArgs: string[]): Promise<{ stdout: string; stderr: string; code: number } | null> {
     const result = await execYtDlp(["-J", "--no-playlist", "--playlist-items", "1", ...clientArgs, url]);
     if (result.code === 0) return result;
     if (!isBotError(result.stderr)) return result; // non-auth error → fail immediately
+    lastStderr = result.stderr; // save for error reporting
     return null; // bot error → try next strategy
   }
 
@@ -569,12 +574,12 @@ app.post("/api/url/metadata", async (req, res) => {
   }
 
   if (!result || result.code !== 0) {
-    const stderr = result?.stderr || "Unknown error";
+    const stderr = result?.stderr || lastStderr || "Unknown error";
     console.error(`yt-dlp error output: ${stderr}`);
     const isAuthError = isBotError(stderr);
     return res.status(isAuthError ? 401 : 500).json({
       success: false,
-      error: formatYtdlpError(stderr),
+      error: formatYtdlpError(isAuthError ? "Sign in to confirm you're not a bot" : stderr),
       waitingCookies: isAuthError,
     });
   }
