@@ -15,8 +15,8 @@ body {
   overflow-x: hidden;
   transition: background-color 0.3s ease, color 0.3s ease;
   background-image:
-    linear-gradient(rgba(0,0,0,0.4) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0,0,0,0.4) 1px, transparent 1px);
+    linear-gradient(rgba(0,0,0,0.5) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,0,0,0.5) 1px, transparent 1px);
   background-size: 40px 40px;
   background-position: 0px 0px;
 }
@@ -25,13 +25,12 @@ body {
   background-color: #020617;
   color: #f1f5f9;
   background-image:
-    linear-gradient(rgba(255,255,255,0.4) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.4) 1px, transparent 1px);
+    linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px);
   background-size: 40px 40px;
   background-position: 0px 0px;
 }
 
-/* Custom scrollbars for a clean minimalist style */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -39,12 +38,21 @@ body {
 ::-webkit-scrollbar-track {
   background: #f1f5f9;
 }
+.dark ::-webkit-scrollbar-track {
+  background: #1e293b;
+}
 ::-webkit-scrollbar-thumb {
   background: #cbd5e1;
   border-radius: 3px;
 }
+.dark ::-webkit-scrollbar-thumb {
+  background: #475569;
+}
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
 }
 
 /* Custom animation utilities used across components */

@@ -26,7 +26,7 @@ export default function PublishedGallery({ onPreview, syncTrigger }: PublishedGa
   const [loading, setLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [typeFilter, setTypeFilter] = useState<"all" | "video" | "audio" | "subtitle">("all");
+  const [typeFilter, setTypeFilter] = useState<"all" | "video" | "audio">("all");
 
   const fetchPublished = async () => {
     setLoading(true);
@@ -67,8 +67,7 @@ export default function PublishedGallery({ onPreview, syncTrigger }: PublishedGa
     const matchesType = 
       typeFilter === "all" ||
       (typeFilter === "video" && item.isVideo) ||
-      (typeFilter === "audio" && item.isAudio) ||
-      (typeFilter === "subtitle" && item.isSubtitle);
+      (typeFilter === "audio" && item.isAudio);
     
     return matchesSearch && matchesType;
   });
@@ -114,7 +113,6 @@ export default function PublishedGallery({ onPreview, syncTrigger }: PublishedGa
             { id: "all", label: "All Items" },
             { id: "video", label: "Videos" },
             { id: "audio", label: "Audios" },
-            { id: "subtitle", label: "Subtitles" },
           ].map((tab) => (
             <button
               key={tab.id}

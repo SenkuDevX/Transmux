@@ -1423,6 +1423,9 @@ app.post("/api/publish", async (req, res) => {
     const ext = finalName.split(".").pop()?.toLowerCase() || "";
     const isAudio = ["mp3", "wav", "ogg", "aac", "flac", "m4a", "opus"].includes(ext);
     const isSubtitle = ["srt", "vtt", "ass", "sub"].includes(ext);
+    if (isSubtitle) {
+      return res.status(400).json({ success: false, error: "Subtitle files cannot be published to the showroom." });
+    }
     const isVideo = !isAudio && !isSubtitle;
 
     const newItem: PublishedItem = {
@@ -1453,9 +1456,9 @@ app.post("/api/publish", async (req, res) => {
   }
 });
 
-// 6b. Retrieve all published items
+// 6b. Retrieve all published items (subtitles excluded from showroom)
 app.get("/api/published", async (req, res) => {
-  const gallery = getPublishedGallery();
+  const gallery = getPublishedGallery().filter(item => !item.isSubtitle);
   // Refresh signed URLs if using S3 (they expire)
   if (USE_S3) {
     for (const item of gallery) {
