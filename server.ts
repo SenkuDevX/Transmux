@@ -12,6 +12,14 @@ import { isS3Configured, uploadToS3, getSignedDownloadUrl, deleteFromS3 } from "
 
 dotenv.config();
 
+// Prevent process crashes from unhandled errors
+process.on("uncaughtException", (err) => {
+  console.error("[FATAL] Uncaught exception:", err?.message || err);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("[FATAL] Unhandled rejection:", (reason as any)?.message || reason);
+});
+
 const app = express();
 app.set("trust proxy", 1);
 const PORT = parseInt(process.env.PORT || "3000", 10);
@@ -330,7 +338,8 @@ app.get("/api/health", (req, res) => {
 // Helper: spawn yt-dlp and capture output, with retry on stale cookies or proxy fallback
 const YTDLP_BASE = ["--impersonate", "Chrome-136"];
 const META_EXTRACTOR = "youtube:player_client=web;skip=webpage,js";
-const DL_EXTRACTOR = "youtube:player_client=android,web;skip=webpage,js";
+const DL_EXTRACTOR = "youtube:player_client=web;skip=webpage,js";
+const DL_EXTRACTOR_NO_COOKIES = "youtube:player_client=android;skip=webpage,js";
 
 function addCookiesArg(args: string[], jobId?: string): string[] {
   // Prefer job-specific cookies if they exist
@@ -361,7 +370,7 @@ function isBotError(stderr: string): boolean {
   return stderr.includes("Sign in to confirm") || stderr.includes("not a bot");
 }
 
-async function runYtDlp(baseArgs: string[]): Promise<{ stdout: string; stderr: string; code: number }> {
+async function runYtDlp(baseArgs: string[], noCookieExtractor?: string): Promise<{ stdout: string; stderr: string; code: number }> {
   // Attempt 1: with cookies
   let result = await execYtDlp(addCookiesArg([...baseArgs]));
 
@@ -370,7 +379,11 @@ async function runYtDlp(baseArgs: string[]): Promise<{ stdout: string; stderr: s
     console.log("[yt-dlp] Cookies rejected by YouTube (stale/expired), retrying without cookies...");
     const stalePath = COOKIES_FILE + ".stale";
     try { fs.renameSync(COOKIES_FILE, stalePath); } catch {}
-    result = await execYtDlp([...baseArgs]);
+    let retryArgs = baseArgs;
+    if (noCookieExtractor) {
+      retryArgs = baseArgs.map(a => a === DL_EXTRACTOR ? noCookieExtractor : a);
+    }
+    result = await execYtDlp([...retryArgs]);
     if (result.code === 0) {
       console.log("[yt-dlp] Succeeded without cookies. Cookies have been marked stale.");
       return result;
@@ -382,7 +395,11 @@ async function runYtDlp(baseArgs: string[]): Promise<{ stdout: string; stderr: s
   // Attempt 2: through proxy if available
   if (result.code !== 0 && PROXY_URL) {
     console.log("[yt-dlp] Retrying through proxy...");
-    result = await execYtDlp([...baseArgs, "--proxy", PROXY_URL]);
+    let proxyArgs = baseArgs;
+    if (noCookieExtractor) {
+      proxyArgs = baseArgs.map(a => a === DL_EXTRACTOR ? noCookieExtractor : a);
+    }
+    result = await execYtDlp([...proxyArgs, "--proxy", PROXY_URL]);
   }
 
   return result;
@@ -561,16 +578,16 @@ app.post("/api/url/metadata", async (req, res) => {
     result = await tryMetadata(["--cookies", cookiesFile, "--extractor-args", META_EXTRACTOR]);
   }
 
-  // Strategy 3: android client + cookies
+  // Strategy 3: web client + pending cookies
   if (!result && fs.existsSync(COOKIES_FILE_PENDING)) {
-    console.log("[yt-dlp] Retrying metadata with android client + cookies...");
+    console.log("[yt-dlp] Retrying metadata with web client + pending cookies...");
     result = await tryMetadata(["--cookies", COOKIES_FILE_PENDING, "--extractor-args", DL_EXTRACTOR]);
   }
 
   // Strategy 4: android client, no cookies
   if (!result) {
     console.log("[yt-dlp] Last resort: android client, no cookies...");
-    result = await tryMetadata(["--extractor-args", DL_EXTRACTOR]);
+    result = await tryMetadata(["--extractor-args", DL_EXTRACTOR_NO_COOKIES]);
   }
 
   if (!result || result.code !== 0) {
@@ -715,7 +732,7 @@ app.post("/api/convert/playlist", async (req, res) => {
         "--no-playlist",
         "--extractor-args", DL_EXTRACTOR,
         entry.url,
-      ]).then(({ stderr, code }) => {
+      ], DL_EXTRACTOR_NO_COOKIES).then(({ stderr, code }) => {
         if (code !== 0) throw new Error(formatYtdlpError(stderr));
       });
 
@@ -915,9 +932,11 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
           "--write-subs", "--write-auto-subs", "--sub-langs", "all,-live_chat",
           "--embed-subs",
           "--no-playlist",
-          "--extractor-args", DL_EXTRACTOR,
           url,
         ];
+
+        const dlCookieArgs = ["--extractor-args", DL_EXTRACTOR];
+        const dlNoCookieArgs = ["--extractor-args", DL_EXTRACTOR_NO_COOKIES];
 
         async function attemptDownload(args: string[]): Promise<void> {
           const ytDlp = spawn("yt-dlp", args);
@@ -956,14 +975,14 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
 
         // Try: with cookies → without cookies if stale → through proxy if configured
         const downloadAttempts: string[][] = [
-          addCookiesArg([...YTDLP_BASE, ...baseDownloadArgs], job.id),
+          addCookiesArg([...YTDLP_BASE, ...dlCookieArgs, ...baseDownloadArgs], job.id),
         ];
 
         if (fs.existsSync(COOKIES_FILE)) {
-          downloadAttempts.push([...YTDLP_BASE, ...baseDownloadArgs]);
+          downloadAttempts.push([...YTDLP_BASE, ...dlNoCookieArgs, ...baseDownloadArgs]);
         }
         if (PROXY_URL) {
-          downloadAttempts.push([...YTDLP_BASE, ...baseDownloadArgs, "--proxy", PROXY_URL]);
+          downloadAttempts.push([...YTDLP_BASE, ...dlNoCookieArgs, ...baseDownloadArgs, "--proxy", PROXY_URL]);
         }
 
         let lastError: Error | null = null;
