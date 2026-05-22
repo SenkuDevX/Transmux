@@ -2,9 +2,14 @@
 
 ## Current Session (May 22, 2026)
 
-### Build Fix
-- **HF Spaces Docker build failing** — `pip3 install curl_cffi` fails with PEP 668 "externally-managed-environment" error on Debian Bookworm.
-- **Fix**: Added `--break-system-packages` flag to pip install commands in `Dockerfile` (lines 6-7). The existing `PIP_REQUIRE_VIRTUALENV=false` env var wasn't sufficient for PEP 668.
+### Fixes
+
+- **HF Spaces Docker build failing** — `pip3 install curl_cffi` fails with PEP 668 "externally-managed-environment" on Debian Bookworm.
+  - **Fix**: Added `--break-system-packages` to pip install commands in `Dockerfile`.
+- **Rate limiter IPv6 warning** — Custom `keyGenerator` using `req.ip` triggered `ERR_ERL_KEY_GEN_IPV6`.
+  - **Fix**: Replaced with `defaultKeyGenerator(req)` from `express-rate-limit` (server.ts:39).
+- **"Save Stream File" downloads index.html** — `ProgressCard.tsx` used `window.location.origin` to build the download URL. In cloud mode (frontend on Vercel, backend on HF Spaces), requests went to Vercel and served index.html instead of the actual file.
+  - **Fix**: Replaced `window.location.origin` with `apiUrl()` helper from `src/api.ts`, which respects `VITE_API_URL` (ProgressCard.tsx:113).
 
 ## Previous Sessions (from git history)
 

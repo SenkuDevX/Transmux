@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Loader2, CheckCircle2, XCircle, Download, FileAudio, FileVideo, FileText, Copy, Check, RefreshCw, Play, BookOpen, Sparkles, ChevronLeft, ChevronRight } from "lucide-react";
 import { formatSize } from "./MetadataPreview";
 import { Job } from "../types";
+import { apiUrl } from "../api";
 
 const EDUCATIONAL_TIPS = [
   {
@@ -109,7 +110,7 @@ export default function ProgressCard({ job, onReset, onPreview }: ProgressCardPr
   const downloadLink = job.downloadUrl
     ? isAbsolute
       ? job.downloadUrl
-      : `${window.location.origin}${job.downloadUrl}?filename=${encodeURIComponent(getDownloadFilename())}`
+      : `${apiUrl(job.downloadUrl)}?filename=${encodeURIComponent(getDownloadFilename())}`
     : "";
 
   const handleCopyLink = async () => {

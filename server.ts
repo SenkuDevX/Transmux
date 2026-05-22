@@ -6,7 +6,7 @@ import { spawn } from "child_process";
 import multer from "multer";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
-import rateLimit from "express-rate-limit";
+import rateLimit, { defaultKeyGenerator } from "express-rate-limit";
 import archiver from "archiver";
 import { isS3Configured, uploadToS3, getSignedDownloadUrl, deleteFromS3 } from "./src/storage.js";
 
@@ -36,7 +36,7 @@ app.use((req, res, next) => {
 const apiLimiter = rateLimit({
   windowMs: 30 * 1000,
   max: 20,
-  keyGenerator: (req) => req.ip || req.socket.remoteAddress || "unknown",
+  keyGenerator: (req) => defaultKeyGenerator(req),
   message: { success: false, error: "Too many requests. Please slow down." },
   standardHeaders: true,
   legacyHeaders: false,
