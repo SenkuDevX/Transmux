@@ -25,17 +25,24 @@ export default function UrlInput({ onMetadataFetched, onUrlReset, activeUrl, onL
 
     try {
       // First: check if this is a playlist
-      const playlistRes = await apiFetch("/api/url/playlist", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: url.trim() }),
-      });
-      const playlistData = await playlistRes.json();
-
-      if (playlistRes.ok && playlistData.success && playlistData.isPlaylist && playlistData.count > 1) {
-        onPlaylistDetected?.(playlistData);
-        return;
+      let isPlaylist = false;
+      try {
+        const playlistRes = await apiFetch("/api/url/playlist", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: url.trim() }),
+        });
+        const playlistData = await playlistRes.json();
+        if (playlistRes.ok && playlistData.success && playlistData.isPlaylist && playlistData.count > 1) {
+          isPlaylist = true;
+          onPlaylistDetected?.(playlistData);
+          return;
+        }
+      } catch {
+        // Playlist detection failed (old server, etc) — fall through to normal metadata
       }
+
+      if (isPlaylist) return;
 
       // Not a playlist — get single video metadata
       const response = await apiFetch("/api/url/metadata", {
