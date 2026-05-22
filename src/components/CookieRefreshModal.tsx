@@ -7,9 +7,10 @@ interface Props {
   jobId: string;
   backendUrl: string;
   onDismiss: () => void;
+  onCancel?: () => void;
 }
 
-export default function CookieRefreshModal({ jobId, backendUrl, onDismiss }: Props) {
+export default function CookieRefreshModal({ jobId, backendUrl, onDismiss, onCancel }: Props) {
   const [mode, setMode] = useState<"prompt" | "manual" | "sending" | "success">("prompt");
   const [cookiesText, setCookiesText] = useState("");
   const [error, setError] = useState("");
@@ -127,7 +128,7 @@ export default function CookieRefreshModal({ jobId, backendUrl, onDismiss }: Pro
               </div>
 
               <button
-                onClick={onDismiss}
+                onClick={onCancel || onDismiss}
                 className="w-full text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 py-2 cursor-pointer"
               >
                 Cancel download

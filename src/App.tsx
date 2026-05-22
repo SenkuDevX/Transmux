@@ -355,7 +355,10 @@ export default function App() {
 
   const handleCookieRefreshDismiss = () => {
     setCookieRefreshJobId(null);
-    // On dismiss, mark the job as failed so user can restart
+  };
+
+  const handleCookieRefreshCancel = () => {
+    setCookieRefreshJobId(null);
     setActiveJob((prev) => prev ? { ...prev, status: "failed", error: "Cookie refresh cancelled by user" } : prev);
   };
 
@@ -594,6 +597,7 @@ export default function App() {
           jobId={cookieRefreshJobId}
           backendUrl={BACKEND_URL}
           onDismiss={handleCookieRefreshDismiss}
+          onCancel={handleCookieRefreshCancel}
         />
       )}
 
