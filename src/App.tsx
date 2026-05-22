@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "motion/react";
 import Header from "./components/Header";
 import FileDropzone from "./components/FileDropzone";
 import UrlInput from "./components/UrlInput";
+import PlaylistView from "./components/PlaylistView";
 import MetadataPreview from "./components/MetadataPreview";
 import TranscodeSettings from "./components/TranscodeSettings";
 import ProgressCard from "./components/ProgressCard";
@@ -33,6 +34,7 @@ export default function App() {
   // Inspected state details
   const [jobId, setJobId] = useState<string | null>(null);
   const [metadata, setMetadata] = useState<MediaMetadata | null>(null);
+  const [playlistData, setPlaylistData] = useState<any | null>(null);
   const [selectedFormatId, setSelectedFormatId] = useState<string>("best");
   const [urlLoading, setUrlLoading] = useState(false);
 
@@ -107,6 +109,48 @@ export default function App() {
     };
   }, []);
 
+  // ─── Easter eggs ───
+
+  // Console egg
+  useEffect(() => {
+    console.log("%c🔮 Transmux Saga PRO", "font-size:24px;font-weight:bold;color:#6366f1");
+    console.log("%c👀 Looking for secrets? Try the Konami Code...", "font-size:14px;color:#94a3b8");
+  }, []);
+
+  // Konami code easter egg
+  useEffect(() => {
+    const konami = ["ArrowUp","ArrowUp","ArrowDown","ArrowDown","ArrowLeft","ArrowRight","ArrowLeft","ArrowRight","b","a"];
+    let idx = 0;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === konami[idx]) {
+        idx++;
+        if (idx === konami.length) {
+          idx = 0;
+          window.dispatchEvent(new CustomEvent("app-toast", {
+            detail: { message: "🕹️ Konami Code Activated! You unlocked the secret sauce! 🎉", type: "success" }
+          }));
+          document.body.classList.add("easter-egg-rainbow");
+          setTimeout(() => document.body.classList.remove("easter-egg-rainbow"), 5000);
+        }
+      } else {
+        idx = e.key === konami[0] ? 1 : 0;
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
+  // Logo click counter (managed in Header, triggered via custom event)
+  useEffect(() => {
+    const handler = () => {
+      window.dispatchEvent(new CustomEvent("app-toast", {
+        detail: { message: "👻 You found me! Transmux was built with ❤️ and lots of ☕", type: "info" }
+      }));
+    };
+    window.addEventListener("logo-easter-egg", handler);
+    return () => window.removeEventListener("logo-easter-egg", handler);
+  }, []);
+
   // Safe timeout sweeper for clearing toast alert layers
   useEffect(() => {
     if (toast) {
@@ -158,6 +202,7 @@ export default function App() {
   const handleReset = () => {
     setJobId(null);
     setMetadata(null);
+    setPlaylistData(null);
     setSelectedFormatId("best");
     setActiveJob(null);
     if (pollingId) {
@@ -189,6 +234,12 @@ export default function App() {
     handleReset();
     setSourceType("url");
     setMetadata(parsedMeta);
+  };
+
+  const handlePlaylistDetected = (playlist: any) => {
+    handleReset();
+    setSourceType("url");
+    setPlaylistData(playlist);
   };
 
   // 5. Trigger transcoder on backend
@@ -398,18 +449,24 @@ export default function App() {
                     <UrlInput
                       onMetadataFetched={handleUrlSuccess}
                       onUrlReset={handleReset}
-                      activeUrl={metadata && metadata.originalUrl ? metadata.originalUrl : null}
+                      activeUrl={metadata && metadata.originalUrl ? metadata.originalUrl : (playlistData && playlistData.originalUrl ? playlistData.originalUrl : null)}
                       onLoadingChange={setUrlLoading}
+                      onPlaylistDetected={handlePlaylistDetected}
                     />
                   )}
                 </div>
               </div>
             )}
 
-            {/* 2. Metadata presentation of analyzed assets */}
-            {urlLoading ? (
+            {/* 2. Playlist view */}
+            {playlistData && (
+              <PlaylistView playlist={playlistData} onReset={handleReset} />
+            )}
+
+            {/* 3. Metadata presentation of analyzed assets */}
+            {!playlistData && urlLoading ? (
               <SkeletonLoader type="metadata" />
-            ) : metadata && (
+            ) : !playlistData && metadata && (
               <MetadataPreview
                 metadata={metadata}
                 selectedFormatId={selectedFormatId}
@@ -417,8 +474,8 @@ export default function App() {
               />
             )}
 
-            {/* 3. Render configs panel when target is analyzed but not yet converting */}
-            {metadata && !activeJob && !urlLoading && (
+            {/* 4. Render configs panel when target is analyzed but not yet converting */}
+            {!playlistData && metadata && !activeJob && !urlLoading && (
               <TranscodeSettings
                 onStartConversion={handleStartConversion}
                 isProcessing={false}

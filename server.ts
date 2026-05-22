@@ -6,6 +6,8 @@ import { spawn } from "child_process";
 import multer from "multer";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
+import rateLimit from "express-rate-limit";
+import archiver from "archiver";
 import { isS3Configured, uploadToS3, getSignedDownloadUrl, deleteFromS3 } from "./src/storage.js";
 
 dotenv.config();
@@ -14,6 +16,7 @@ const app = express();
 const PORT = parseInt(process.env.PORT || "3000", 10);
 const BACKEND_URL = process.env.BACKEND_URL || `http://0.0.0.0:${PORT}`;
 const USE_S3 = isS3Configured();
+const ENGINE_ENABLED = process.env.STATUS !== "false";
 
 // Enable JSON body rendering
 app.use(express.json());
@@ -26,6 +29,25 @@ app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
   if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
+
+// Rate limiting — per-IP throttle to prevent abuse
+const apiLimiter = rateLimit({
+  windowMs: 30 * 1000,
+  max: 20,
+  keyGenerator: (req) => req.ip || req.socket.remoteAddress || "unknown",
+  message: { success: false, error: "Too many requests. Please slow down." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use("/api", apiLimiter);
+
+// Engine status middleware — blocks all conversion endpoints when STATUS=false
+app.use("/api", (req, res, next) => {
+  if (!ENGINE_ENABLED && !req.path.startsWith("/health") && !req.path.startsWith("/cookies")) {
+    return res.status(503).json({ success: false, error: "Engine is under maintenance. Coming back soon!" });
+  }
   next();
 });
 
@@ -274,13 +296,18 @@ function parseFfmpegError(stderr: string): string {
   return "FFmpeg pipelines failed unexpectedly during transcoding. Verify settings match the target file format.";
 }
 
+function sanitizeFilename(name: string): string {
+  return name.replace(/[<>:"\/\\|?*]/g, "_").replace(/\s+/g, "_").slice(0, 100);
+}
+
 // REST API Endpoints
 
 // 1. Health Ping
 app.get("/api/health", (req, res) => {
   res.json({
-    status: "ok",
+    status: ENGINE_ENABLED ? "ok" : "maintenance",
     product: "Transmux (Project Saga)",
+    engine: ENGINE_ENABLED ? "live" : "maintenance",
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
   });
@@ -492,6 +519,173 @@ app.post("/api/url/metadata", async (req, res) => {
       res.status(500).json({ success: false, error: "JSON parsing error on source metadata stream" });
     }
   });
+});
+
+// 3b. Playlist metadata extraction
+app.post("/api/url/playlist", (req, res) => {
+  const { url } = req.body;
+  if (!url) return res.status(400).json({ success: false, error: "URL is required" });
+
+  const ytDlp = spawn("yt-dlp", addCookiesArg([
+    "-J",
+    "--flat-playlist",
+    "--no-playlist", "--playlist-items", "1:50",
+    "--extractor-args", "youtube:player_client=android,tv",
+    "--user-agent", "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.83 Mobile Safari/537.36",
+    url,
+  ]));
+
+  let stdout = "";
+  let stderr = "";
+  ytDlp.stdout.on("data", (data) => { stdout += data; });
+  ytDlp.stderr.on("data", (data) => { stderr += data; });
+
+  ytDlp.on("close", (code) => {
+    if (code !== 0) {
+      return res.status(500).json({ success: false, error: formatYtdlpError(stderr) });
+    }
+    try {
+      const data = JSON.parse(stdout);
+      const isPlaylist = data.extractor_key === "YoutubePlaylist" || data.playlist_count > 1;
+      const entries = (data.entries || []).slice(0, 50).map((e: any, i: number) => ({
+        index: i,
+        id: e.id || e.url,
+        title: e.title || `Item ${i + 1}`,
+        url: e.url || e.webpage_url,
+        duration: e.duration || 0,
+        thumbnail: e.thumbnail || data.thumbnail || "",
+      }));
+
+      res.json({
+        success: true,
+        isPlaylist,
+        title: data.title || "Untitled Playlist",
+        count: entries.length,
+        entries,
+        thumbnail: data.thumbnail || "",
+        originalUrl: url,
+      });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: "Failed to parse playlist data" });
+    }
+  });
+});
+
+// 3c. Convert playlist — batch process and zip
+app.post("/api/convert/playlist", async (req, res) => {
+  const { entries, formatId, outputFormat, bitrate, videoQuality, audioOnly } = req.body;
+  if (!entries || !Array.isArray(entries) || entries.length === 0) {
+    return res.status(400).json({ success: false, error: "Playlist entries are required" });
+  }
+
+  const batchId = crypto.randomUUID();
+  const batchDir = path.join(tmpJobsDir, `batch_${batchId}`);
+  fs.mkdirSync(batchDir, { recursive: true });
+  const zipPath = path.join(batchDir, "playlist.zip");
+
+  const outputStream = fs.createWriteStream(zipPath);
+  const archive = archiver("zip", { zlib: { level: 5 } });
+  archive.pipe(outputStream);
+
+  const total = entries.length;
+  const results: { index: number; title: string; error?: string }[] = [];
+
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+    const itemDir = path.join(batchDir, `item_${i}`);
+    fs.mkdirSync(itemDir, { recursive: true });
+
+    try {
+      const selFormat = entry.formatId || formatId || "best";
+      const outExt = outputFormat || "mp4";
+
+      await new Promise<void>((resolve, reject) => {
+        const proc = spawn("yt-dlp", addCookiesArg([
+          "-f", selFormat,
+          "-o", path.join(itemDir, `input.%(ext)s`),
+          "--no-playlist",
+          "--extractor-args", "youtube:player_client=android,tv",
+          "--user-agent", "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.83 Mobile Safari/537.36",
+          entry.url,
+        ]));
+        let errData = "";
+        proc.stderr.on("data", (d) => { errData += d; });
+        proc.on("close", (code) => {
+          if (code !== 0) reject(new Error(formatYtdlpError(errData)));
+          else resolve();
+        });
+      });
+
+      const files = fs.readdirSync(itemDir);
+      const dlFile = files.find(f => f.startsWith("input."));
+      if (!dlFile) throw new Error("No file downloaded");
+
+      const inputPath = path.join(itemDir, dlFile);
+      const outName = `${sanitizeFilename(entry.title || `item_${i}`)}.${outExt}`;
+      const outputPath = path.join(itemDir, outName);
+
+      let ffmpegArgs = ["-i", inputPath];
+      if (audioOnly) {
+        ffmpegArgs.push("-vn", "-c:a", bitrate === "lossless" ? "flac" : "libmp3lame");
+        if (bitrate && bitrate !== "lossless") ffmpegArgs.push("-b:a", bitrate);
+      } else {
+        ffmpegArgs.push("-c:v", "libx264", "-preset", "fast");
+        if (videoQuality) ffmpegArgs.push("-crf", videoQuality);
+        if (bitrate && bitrate !== "lossless") ffmpegArgs.push("-c:a", "aac", "-b:a", bitrate);
+      }
+      ffmpegArgs.push("-y", outputPath);
+
+      await new Promise<void>((resolve, reject) => {
+        const ff = spawn("ffmpeg", ffmpegArgs);
+        let errData = "";
+        ff.stderr.on("data", (d) => { errData += d; });
+        ff.on("close", (code) => {
+          if (code !== 0) reject(new Error(`FFmpeg error: ${errData.slice(-200)}`));
+          else resolve();
+        });
+      });
+
+      archive.file(outputPath, { name: outName });
+      results.push({ index: i, title: entry.title });
+    } catch (err: any) {
+      results.push({ index: i, title: entry.title, error: err.message });
+    }
+
+    // Cleanup item dir
+    fs.rmSync(itemDir, { recursive: true, force: true });
+  }
+
+  await archive.finalize();
+  await new Promise<void>((resolve) => outputStream.on("close", resolve));
+
+  const zipStat = fs.statSync(zipPath);
+
+  // Store batch info for download
+  const batchMeta = { batchId, zipPath, total, results, createdAt: new Date().toISOString() };
+  const batchMetaPath = path.join(tmpJobsDir, `batch_${batchId}.json`);
+  fs.writeFileSync(batchMetaPath, JSON.stringify(batchMeta));
+
+  res.json({
+    success: true,
+    batchId,
+    total,
+    completed: results.filter(r => !r.error).length,
+    failed: results.filter(r => r.error).length,
+    results,
+    downloadUrl: `/api/download/batch/${batchId}`,
+  });
+});
+
+// Batch download
+app.get("/api/download/batch/:batchId", (req, res) => {
+  const { batchId } = req.params;
+  const batchMetaPath = path.join(tmpJobsDir, `batch_${batchId}.json`);
+  if (!fs.existsSync(batchMetaPath)) return res.status(404).json({ success: false, error: "Batch not found or expired" });
+
+  const meta = JSON.parse(fs.readFileSync(batchMetaPath, "utf-8"));
+  if (!fs.existsSync(meta.zipPath)) return res.status(404).json({ success: false, error: "Zip file not found" });
+
+  res.download(meta.zipPath, `transmux_playlist_${batchId.slice(0, 8)}.zip`);
 });
 
 // 4. Trigger Media Conversion Action

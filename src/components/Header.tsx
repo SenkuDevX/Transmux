@@ -1,4 +1,5 @@
-import { Layers, Activity, ServerCrash, Sun, Moon, Info } from "lucide-react";
+import { Layers, Activity, ServerCrash, Sun, Moon, Info, Wrench } from "lucide-react";
+import { useState, useRef } from "react";
 
 interface HeaderProps {
   isServerOnline: boolean;
@@ -12,6 +13,19 @@ interface HeaderProps {
 }
 
 export default function Header({ isServerOnline, serverInfo, theme, onToggleTheme, onOpenInfo }: HeaderProps) {
+  const logoClickCount = useRef(0);
+  const [logoClicks, setLogoClicks] = useState(0);
+
+  const handleLogoClick = () => {
+    logoClickCount.current++;
+    setLogoClicks(logoClickCount.current);
+    if (logoClickCount.current >= 5) {
+      logoClickCount.current = 0;
+      setLogoClicks(0);
+      window.dispatchEvent(new CustomEvent("logo-easter-egg"));
+    }
+  };
+
   return (
     <header id="transmux-header" className="border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-50 py-4 px-6 sm:px-8">
       <div className="max-w-7xl mx-auto flex items-center justify-between">
@@ -22,8 +36,11 @@ export default function Header({ isServerOnline, serverInfo, theme, onToggleThem
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span id="brand-title" className="text-lg font-bold tracking-tight text-slate-900 dark:text-white font-sans">
+              <span id="brand-title" onClick={handleLogoClick} className="text-lg font-bold tracking-tight text-slate-900 dark:text-white font-sans cursor-pointer select-none">
                 Transmux
+                {logoClicks > 0 && logoClicks < 5 && (
+                  <span className="ml-1 text-[10px] text-slate-400">{5 - logoClicks}</span>
+                )}
               </span>
               <span id="brand-tagline" className="px-2 py-0.5 bg-slate-100 dark:bg-slate-850 text-slate-500 dark:text-slate-400 rounded text-[10px] font-medium tracking-widest uppercase">
                 Saga PRO

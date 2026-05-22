@@ -27,7 +27,7 @@ export default function PreviewPopup({ mediaId, filename, size, isPublished = fa
 
   const ext = filename.split(".").pop()?.toLowerCase() || "";
   const isAudio = ["mp3", "wav", "ogg", "aac", "flac", "m4a", "opus"].includes(ext);
-  const isSubtitle = ["srt", "vtt", "ass", "sub"].includes(ext);
+  const isSubtitle = false;
   const isVideo = !isAudio && !isSubtitle;
 
   const streamUrl = apiUrl(isPublished
@@ -316,25 +316,10 @@ export default function PreviewPopup({ mediaId, filename, size, isPublished = fa
             </div>
           )}
 
-          {isSubtitle && (
-            <div className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 rounded-2xl p-5 overflow-y-auto max-h-[300px] shadow-inner font-mono text-xs text-slate-700 dark:text-slate-300">
-              {loadingText ? (
-                <div className="py-12 text-center text-slate-400 font-sans tracking-wide">
-                  Reading stream data into editor arrays...
-                </div>
-              ) : textLines.length > 0 ? (
-                <div className="space-y-2">
-                  {textLines.map((line, idx) => (
-                    <p key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-900 px-2 py-0.5 rounded transition-colors whitespace-pre-wrap">
-                      {line}
-                    </p>
-                  ))}
-                </div>
-              ) : (
-                <div className="py-12 text-center text-slate-400">
-                  No subtitle records.
-                </div>
-              )}
+          {!isVideo && !isAudio && (
+            <div className="py-16 text-center">
+              <FileText className="h-12 w-12 mx-auto text-slate-300 dark:text-slate-600 mb-3" />
+              <p className="text-slate-400 dark:text-slate-500 text-sm">No preview available for this file type.</p>
             </div>
           )}
 

@@ -7,9 +7,10 @@ interface UrlInputProps {
   onUrlReset: () => void;
   activeUrl: string | null;
   onLoadingChange?: (isLoading: boolean) => void;
+  onPlaylistDetected?: (playlist: any) => void;
 }
 
-export default function UrlInput({ onMetadataFetched, onUrlReset, activeUrl, onLoadingChange }: UrlInputProps) {
+export default function UrlInput({ onMetadataFetched, onUrlReset, activeUrl, onLoadingChange, onPlaylistDetected }: UrlInputProps) {
   const [url, setUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
@@ -23,6 +24,20 @@ export default function UrlInput({ onMetadataFetched, onUrlReset, activeUrl, onL
     if (onLoadingChange) onLoadingChange(true);
 
     try {
+      // First: check if this is a playlist
+      const playlistRes = await apiFetch("/api/url/playlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: url.trim() }),
+      });
+      const playlistData = await playlistRes.json();
+
+      if (playlistRes.ok && playlistData.success && playlistData.isPlaylist && playlistData.count > 1) {
+        onPlaylistDetected?.(playlistData);
+        return;
+      }
+
+      // Not a playlist — get single video metadata
       const response = await apiFetch("/api/url/metadata", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
