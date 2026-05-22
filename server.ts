@@ -97,7 +97,7 @@ const upload = multer({
 interface JobState {
   id: string;
   type: "file" | "url";
-  status: "queued" | "processing" | "completed" | "failed";
+  status: "queued" | "processing" | "completed" | "failed" | "waiting_cookies";
   progress: number;
   speed: string;
   eta: string;
@@ -116,6 +116,12 @@ interface JobState {
   outputPath: string | null;
   s3Key: string | null; // S3 object key (if USE_S3)
   subtitleFiles: string[]; // .vtt/.srt files from yt-dlp
+
+  // Cookie refresh flow
+  waitingCookies: boolean;
+  cookieRetryCount: number;
+  _settings?: any;
+  _url?: string;
 }
 
 const redisStatePath = path.join(DATA_ROOT, "redis_state.json");
@@ -322,7 +328,15 @@ const YTDLP_BASE = ["--force-ipv4", "--impersonate", "chrome"];
 const META_EXTRACTOR = "youtube:player_client=web;skip=webpage,js";
 const DL_EXTRACTOR = "youtube:player_client=tv_embedded,web;skip=webpage,js";
 
-function addCookiesArg(args: string[]): string[] {
+function addCookiesArg(args: string[], jobId?: string): string[] {
+  // Prefer job-specific cookies if they exist
+  if (jobId) {
+    const jobCookies = path.join(tmpJobsDir, jobId, "cookies.txt");
+    if (fs.existsSync(jobCookies)) {
+      return [...args, "--cookies", jobCookies];
+    }
+  }
+  // Fall back to global cookies file
   if (fs.existsSync(COOKIES_FILE)) {
     return [...args, "--cookies", COOKIES_FILE];
   }
@@ -456,6 +470,8 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
         outputPath: null,
         s3Key: null,
         subtitleFiles: [],
+        waitingCookies: false,
+        cookieRetryCount: 0,
       };
 
     jobs.set(jobId, job);
@@ -751,6 +767,8 @@ app.post("/api/convert", async (req, res) => {
       outputPath: null,
       s3Key: null,
       subtitleFiles: [],
+      waitingCookies: false,
+      cookieRetryCount: 0,
     };
     jobs.set(activeJobId, job);
   } else {
@@ -772,130 +790,187 @@ app.post("/api/convert", async (req, res) => {
   });
 });
 
+// Cookie refresh endpoint — extension POSTs fresh YouTube cookies here
+app.post("/api/cookies/:jobId", async (req, res) => {
+  const { jobId } = req.params;
+  const { cookies } = req.body;
+  const job = jobs.get(jobId);
+  if (!job) {
+    return res.status(404).json({ success: false, error: "Job not found" });
+  }
+  if (!cookies || typeof cookies !== "string") {
+    return res.status(400).json({ success: false, error: "cookies (string) is required" });
+  }
+
+  // Write to job-specific cookies file
+  const cookiesPath = path.join(tmpJobsDir, jobId, "cookies.txt");
+  fs.writeFileSync(cookiesPath, cookies);
+  console.log(`[Cookies] Received fresh cookies for job ${jobId} (${cookies.length} bytes)`);
+
+  // Resume job if waiting for cookies
+  if (job.waitingCookies && job.status === "waiting_cookies") {
+    job.cookieRetryCount = (job.cookieRetryCount || 0) + 1;
+    // Fire-and-forget retry in background
+    processMediaJob(job, job._settings, job._url);
+  }
+
+  res.json({ success: true });
+});
+
 // Helper: Process job lifecycle in background
 async function processMediaJob(job: JobState, settings: any, url?: string) {
   const jobDir = path.join(tmpJobsDir, job.id);
 
+  // Save settings for potential cookie refresh retry
+  job._settings = settings;
+  job._url = url;
+
   try {
     job.status = "processing";
+    job.waitingCookies = false;
     job.progress = 5;
 
     // Phase 1: URL stream download if needed
     if (job.type === "url" && url) {
-      job.inputName = `Downloading from URL...`;
-      
-      const formatSelection = settings.selectedFormatId && settings.selectedFormatId !== "best" && settings.selectedFormatId !== DEFAULT_FORMAT
-        ? settings.selectedFormatId
-        : DEFAULT_FORMAT;
+      // If download file already exists from a previous attempt, skip download
+      const existingFiles = fs.existsSync(jobDir) ? fs.readdirSync(jobDir) : [];
+      const existingDownload = existingFiles.find(f => f.startsWith("input.") && !/\.(jpg|jpeg|png|webp)$/i.test(f));
+      if (existingDownload) {
+        console.log(`[Job ${job.id}] Download already exists, skipping download phase.`);
+        job.inputPath = path.join(jobDir, existingDownload);
+        job.inputSize = fs.statSync(job.inputPath).size;
+        job.inputName = settings.mediaTitle || `url_source_${settings.outputFormat || 'converted'}${path.extname(existingDownload)}`;
+      } else {
+        job.inputName = `Downloading from URL...`;
 
-      const baseDownloadArgs = [
-        "-f", formatSelection,
-        "-o", path.join(jobDir, "input.%(ext)s"),
-        "--write-thumbnail",
-        "--convert-thumbnails", "jpg",
-        "--write-subs", "--write-auto-subs", "--sub-langs", "all,-live_chat",
-        "--embed-subs",
-        "--no-playlist",
-        "--extractor-args", DL_EXTRACTOR,
-        url,
-      ];
+        const formatSelection = settings.selectedFormatId && settings.selectedFormatId !== "best" && settings.selectedFormatId !== DEFAULT_FORMAT
+          ? settings.selectedFormatId
+          : DEFAULT_FORMAT;
 
-      async function attemptDownload(args: string[]): Promise<void> {
-        const ytDlp = spawn("yt-dlp", args);
-        let ytdlpStderr = "";
+        const baseDownloadArgs = [
+          "-f", formatSelection,
+          "-o", path.join(jobDir, "input.%(ext)s"),
+          "--write-thumbnail",
+          "--convert-thumbnails", "jpg",
+          "--write-subs", "--write-auto-subs", "--sub-langs", "all,-live_chat",
+          "--embed-subs",
+          "--no-playlist",
+          "--extractor-args", DL_EXTRACTOR,
+          url,
+        ];
 
-        ytDlp.stderr.on("data", (data) => {
-          ytdlpStderr += data.toString();
-        });
+        async function attemptDownload(args: string[]): Promise<void> {
+          const ytDlp = spawn("yt-dlp", args);
+          let ytdlpStderr = "";
 
-        await new Promise<void>((resolve, reject) => {
-          ytDlp.stdout.on("data", (data) => {
-            const text = data.toString();
-            const progressMatch = text.match(/\[download\]\s+([\d\.]+)%/);
-            const speedMatch = text.match(/at\s+([^\s]+)/);
-            const etaMatch = text.match(/ETA\s+([^\s]+)/);
-
-            if (progressMatch) {
-              const downloadPct = parseFloat(progressMatch[1]);
-              job.progress = Math.min(45, Math.round(downloadPct * 0.4));
-            }
-            if (speedMatch) job.speed = speedMatch[1];
-            if (etaMatch) job.eta = etaMatch[1];
+          ytDlp.stderr.on("data", (data) => {
+            ytdlpStderr += data.toString();
           });
 
-          ytDlp.on("close", (code) => {
-            if (code !== 0) {
-              const err = new Error(formatYtdlpError(ytdlpStderr));
-              (err as any).rawStderr = ytdlpStderr;
-              reject(err);
-            } else {
-              resolve();
-            }
+          await new Promise<void>((resolve, reject) => {
+            ytDlp.stdout.on("data", (data) => {
+              const text = data.toString();
+              const progressMatch = text.match(/\[download\]\s+([\d\.]+)%/);
+              const speedMatch = text.match(/at\s+([^\s]+)/);
+              const etaMatch = text.match(/ETA\s+([^\s]+)/);
+
+              if (progressMatch) {
+                const downloadPct = parseFloat(progressMatch[1]);
+                job.progress = Math.min(45, Math.round(downloadPct * 0.4));
+              }
+              if (speedMatch) job.speed = speedMatch[1];
+              if (etaMatch) job.eta = etaMatch[1];
+            });
+
+            ytDlp.on("close", (code) => {
+              if (code !== 0) {
+                const err = new Error(formatYtdlpError(ytdlpStderr));
+                (err as any).rawStderr = ytdlpStderr;
+                reject(err);
+              } else {
+                resolve();
+              }
+            });
           });
-        });
-      }
+        }
 
-      // Try: with cookies → without cookies if stale → through proxy if configured
-      const downloadAttempts: string[][] = [
-        addCookiesArg([...YTDLP_BASE, ...baseDownloadArgs]),
-      ];
+        // Try: with cookies → without cookies if stale → through proxy if configured
+        const downloadAttempts: string[][] = [
+          addCookiesArg([...YTDLP_BASE, ...baseDownloadArgs], job.id),
+        ];
 
-      if (fs.existsSync(COOKIES_FILE)) {
-        downloadAttempts.push([...YTDLP_BASE, ...baseDownloadArgs]);
-      }
-      if (PROXY_URL) {
-        downloadAttempts.push([...YTDLP_BASE, ...baseDownloadArgs, "--proxy", PROXY_URL]);
-      }
+        if (fs.existsSync(COOKIES_FILE)) {
+          downloadAttempts.push([...YTDLP_BASE, ...baseDownloadArgs]);
+        }
+        if (PROXY_URL) {
+          downloadAttempts.push([...YTDLP_BASE, ...baseDownloadArgs, "--proxy", PROXY_URL]);
+        }
 
-      let lastError: Error | null = null;
-      for (const attemptArgs of downloadAttempts) {
-        try {
-          await attemptDownload(attemptArgs);
-          lastError = null;
-          break;
-        } catch (err: any) {
-          lastError = err;
-          const rawStderr = err.rawStderr || err.message;
-          if (attemptArgs.includes("--cookies") && isBotError(rawStderr)) {
-            console.log("[yt-dlp] Cookies rejected by YouTube (stale/expired), skipping...");
-            const stalePath = COOKIES_FILE + ".stale";
-            try { fs.renameSync(COOKIES_FILE, stalePath); } catch {}
+        let lastError: Error | null = null;
+        let allBotErrors = true;
+        for (const attemptArgs of downloadAttempts) {
+          try {
+            await attemptDownload(attemptArgs);
+            lastError = null;
+            break;
+          } catch (err: any) {
+            lastError = err;
+            const rawStderr = err.rawStderr || err.message;
+            const isBot = isBotError(rawStderr);
+            if (!isBot) allBotErrors = false;
+            if (attemptArgs.includes("--cookies") && isBot) {
+              console.log("[yt-dlp] Cookies rejected by YouTube (stale/expired), skipping...");
+              // Mark global cookies as stale
+              const stalePath = COOKIES_FILE + ".stale";
+              try { fs.renameSync(COOKIES_FILE, stalePath); } catch {}
+              // Also mark any job-specific cookies as stale
+              const jobCookies = path.join(tmpJobsDir, job.id, "cookies.txt");
+              if (fs.existsSync(jobCookies)) {
+                try { fs.renameSync(jobCookies, jobCookies + ".stale"); } catch {}
+              }
+            }
+            console.log(`[yt-dlp] Download attempt failed, trying next method...`);
           }
-          console.log(`[yt-dlp] Download attempt failed, trying next method...`);
         }
-      }
-      if (lastError) throw lastError;
 
-      // Find downloaded file with dynamic extension (exclude thumbnails)
-      const files = fs.readdirSync(jobDir);
-      const downloadedFile = files.find(f => f.startsWith("input.") && !/\.(jpg|jpeg|png|webp)$/i.test(f));
-      if (!downloadedFile) {
-        throw new Error("Unable to locate downloaded url stream file in storage");
-      }
-
-      job.inputPath = path.join(jobDir, downloadedFile);
-      job.inputSize = fs.statSync(job.inputPath).size;
-      job.inputName = settings.mediaTitle || `url_source_${settings.outputFormat || 'converted'}${path.extname(downloadedFile)}`;
-
-      // Look for yt-dlp thumbnail written alongside the media file
-      const thumbnailFile = files.find(f => /\.(jpg|jpeg|png|webp)$/i.test(f) && f !== "thumbnail.jpg");
-      if (thumbnailFile) {
-        const src = path.join(jobDir, thumbnailFile);
-        try {
-          fs.renameSync(src, path.join(jobDir, "thumbnail.jpg"));
-          console.log(`[CoverArt] Using yt-dlp thumbnail: ${thumbnailFile}`);
-        } catch {
-          fs.copyFileSync(src, path.join(jobDir, "thumbnail.jpg"));
+        // If all attempts failed and it looks like an auth/bot issue, pause for cookie refresh
+        if (lastError && allBotErrors && job.cookieRetryCount < 2) {
+          console.log(`[Job ${job.id}] All attempts blocked by YouTube auth. Requesting cookie refresh from user...`);
+          job.status = "waiting_cookies";
+          job.waitingCookies = true;
+          job.error = "YouTube requires authentication. Please refresh cookies.";
+          return; // Exit gracefully — frontend will trigger cookie refresh
         }
+
+        if (lastError) throw lastError;
+
+        // Find downloaded file with dynamic extension (exclude thumbnails)
+        const files = fs.readdirSync(jobDir);
+        const downloadedFile = files.find(f => f.startsWith("input.") && !/\.(jpg|jpeg|png|webp)$/i.test(f));
+        if (!downloadedFile) {
+          throw new Error("Unable to locate downloaded url stream file in storage");
+        }
+
+        job.inputPath = path.join(jobDir, downloadedFile);
+        job.inputSize = fs.statSync(job.inputPath).size;
+        job.inputName = settings.mediaTitle || `url_source_${settings.outputFormat || 'converted'}${path.extname(downloadedFile)}`;
+
+        // Look for yt-dlp thumbnail written alongside the media file
+        const thumbnailFile = files.find(f => /\.(jpg|jpeg|png|webp)$/i.test(f) && f !== "thumbnail.jpg");
+        if (thumbnailFile) {
+          const src = path.join(jobDir, thumbnailFile);
+          try {
+            fs.renameSync(src, path.join(jobDir, "thumbnail.jpg"));
+            console.log(`[CoverArt] Using yt-dlp thumbnail: ${thumbnailFile}`);
+          } catch {
+            fs.copyFileSync(src, path.join(jobDir, "thumbnail.jpg"));
+          }
+        }
+
+        // Collect subtitle files downloaded alongside the media (store as relative filenames)
+        const SUB_EXTENSIONS = [".vtt", ".srt", ".ass", ".ssa", ".sub"];
+        job.subtitleFiles = files.filter(f => SUB_EXTENSIONS.includes(path.extname(f).toLowerCase()));
       }
-
-      // Collect subtitle files downloaded alongside the media (store as relative filenames)
-      const SUB_EXTENSIONS = [".vtt", ".srt", ".ass", ".ssa", ".sub"];
-      job.subtitleFiles = files.filter(f => SUB_EXTENSIONS.includes(path.extname(f).toLowerCase()));
-
-      // Probe stream duration
-      const meta = await probeMetadata(job.inputPath);
-      job.totalDuration = meta.duration;
     }
 
     if (!job.inputPath || !fs.existsSync(job.inputPath)) {
@@ -1382,6 +1457,7 @@ app.get("/api/job/:id", (req, res) => {
       createdAt: job.createdAt,
       downloadUrl: job.downloadUrl,
       subtitleFiles: job.subtitleFiles,
+      waitingCookies: job.waitingCookies,
     },
   });
 });

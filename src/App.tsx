@@ -13,8 +13,11 @@ import HistoryList from "./components/HistoryList";
 import SkeletonLoader from "./components/SkeletonLoader";
 import PreviewPopup from "./components/PreviewPopup";
 import PublishedGallery from "./components/PublishedGallery";
+import CookieRefreshModal from "./components/CookieRefreshModal";
 import { apiFetch } from "./api";
 import { MediaMetadata, ConversionSettings, Job, ConversionHistoryItem } from "./types";
+
+const BACKEND_URL = import.meta.env.VITE_API_URL || window.location.origin;
 
 export default function App() {
   // Theme Management
@@ -48,6 +51,9 @@ export default function App() {
 
   // Sync index for community directory
   const [syncTrigger, setSyncTrigger] = useState(0);
+
+  // Cookie refresh flow
+  const [cookieRefreshJobId, setCookieRefreshJobId] = useState<string | null>(null);
 
   // Conversion engine track
   const [activeJob, setActiveJob] = useState<Job | null>(null);
@@ -334,6 +340,8 @@ export default function App() {
             } else if (data.job.status === "failed") {
               clearInterval(poll);
               setPollingId(null);
+            } else if (data.job.status === "waiting_cookies" && data.job.waitingCookies) {
+              setCookieRefreshJobId(data.job.id);
             }
           }
         }
@@ -343,6 +351,12 @@ export default function App() {
     }, 1000);
 
     setPollingId(poll);
+  };
+
+  const handleCookieRefreshDismiss = () => {
+    setCookieRefreshJobId(null);
+    // On dismiss, mark the job as failed so user can restart
+    setActiveJob((prev) => prev ? { ...prev, status: "failed", error: "Cookie refresh cancelled by user" } : prev);
   };
 
   const handleClearHistory = () => {
@@ -571,6 +585,15 @@ export default function App() {
           size={previewMedia.size}
           isPublished={previewMedia.isPublished}
           onClose={() => setPreviewMedia(null)}
+        />
+      )}
+
+      {/* Cookie Refresh Modal */}
+      {cookieRefreshJobId && (
+        <CookieRefreshModal
+          jobId={cookieRefreshJobId}
+          backendUrl={BACKEND_URL}
+          onDismiss={handleCookieRefreshDismiss}
         />
       )}
 

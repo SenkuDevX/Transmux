@@ -45,7 +45,7 @@ export interface ConversionSettings {
 export interface Job {
   id: string;
   type: 'file' | 'url';
-  status: 'queued' | 'processing' | 'completed' | 'failed';
+  status: 'queued' | 'processing' | 'completed' | 'failed' | 'waiting_cookies';
   progress: number; // 0 to 100
   speed: string; // e.g. "2.1x" or "1.5 MB/s"
   eta: string; // e.g. "00:15"
@@ -57,6 +57,8 @@ export interface Job {
   error: string | null;
   createdAt: string;
   downloadUrl: string | null;
+  subtitleFiles?: string[];
+  waitingCookies?: boolean;
 }
 
 export interface ConversionHistoryItem {
