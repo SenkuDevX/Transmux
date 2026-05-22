@@ -18,6 +18,8 @@ const PORT = parseInt(process.env.PORT || "3000", 10);
 const BACKEND_URL = process.env.BACKEND_URL || `http://0.0.0.0:${PORT}`;
 const USE_S3 = isS3Configured();
 const ENGINE_ENABLED = process.env.STATUS !== "false";
+const PROXY_URL = process.env.PROXY_URL || "";
+const DEFAULT_FORMAT = "bestvideo[height<=1080][vcodec^=avc1]+bestaudio[ext=m4a]/best[height<=1080]";
 
 // Enable JSON body rendering
 app.use(express.json());
@@ -40,6 +42,7 @@ const apiLimiter = rateLimit({
   message: { success: false, error: "Too many requests. Please slow down." },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.path.startsWith("/api/job/"),
 });
 app.use("/api", apiLimiter);
 
@@ -321,6 +324,26 @@ function addCookiesArg(args: string[]): string[] {
   return args;
 }
 
+// Helper: spawn yt-dlp and capture output, with optional cookie→proxy fallback
+function execYtDlp(args: string[]): Promise<{ stdout: string; stderr: string; code: number }> {
+  return new Promise((resolve) => {
+    const proc = spawn("yt-dlp", args);
+    let stdout = "", stderr = "";
+    proc.stdout.on("data", (d: Buffer) => { stdout += d.toString(); });
+    proc.stderr.on("data", (d: Buffer) => { stderr += d.toString(); });
+    proc.on("close", (code) => resolve({ stdout, stderr, code: code ?? 1 }));
+  });
+}
+
+async function runYtDlp(baseArgs: string[], retryOnFail = true): Promise<{ stdout: string; stderr: string; code: number }> {
+  let result = await execYtDlp(addCookiesArg([...baseArgs]));
+  if (result.code !== 0 && retryOnFail && PROXY_URL) {
+    console.log("[yt-dlp] Cookies failed, retrying through proxy...");
+    result = await execYtDlp([...baseArgs, "--proxy", PROXY_URL]);
+  }
+  return result;
+}
+
 // 1b. Cookies management (admin-only — uses ADMIN_KEY env var)
 const ADMIN_KEY = process.env.ADMIN_KEY;
 
@@ -452,121 +475,105 @@ app.post("/api/url/metadata", async (req, res) => {
   }
 
   // Spawn yt-dlp to inspect format offerings
-  const ytDlp = spawn("yt-dlp", addCookiesArg([
+  const { stdout, stderr, code } = await runYtDlp([
     "-J",
     "--no-playlist",
     "--playlist-items", "1",
     "--extractor-args", "youtube:player_client=tv;skip=webpage,js",
     url,
-  ]));
+  ]);
 
-  let stdout = "";
-  let stderr = "";
+  if (code !== 0) {
+    console.error(`yt-dlp error output: ${stderr}`);
+    return res.status(500).json({
+      success: false,
+      error: formatYtdlpError(stderr),
+    });
+  }
 
-  ytDlp.stdout.on("data", (data) => { stdout += data; });
-  ytDlp.stderr.on("data", (data) => { stderr += data; });
+  try {
+    const data = JSON.parse(stdout);
 
-  ytDlp.on("close", (code) => {
-    if (code !== 0) {
-      console.error(`yt-dlp error output: ${stderr}`);
-      return res.status(500).json({
-        success: false,
-        error: formatYtdlpError(stderr),
+    const formats = (data.formats || [])
+      .filter((f: any) => f.vcodec !== "none" || f.acodec !== "none")
+      .map((f: any) => ({
+        formatId: f.format_id,
+        extension: f.ext,
+        resolution: f.resolution || (f.width && f.height ? `${f.width}x${f.height}` : "audio-only"),
+        videoCodec: f.vcodec || "none",
+        audioCodec: f.acodec || "none",
+        filesize: f.filesize || f.filesize_approx || 0,
+        note: f.format_note || "",
+      }));
+
+    let bestThumbnail = data.thumbnail || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&auto=format&fit=crop&q=60";
+    if (Array.isArray(data.thumbnails) && data.thumbnails.length > 0) {
+      const sorted = [...data.thumbnails].filter((t: any) => t.url).sort((a: any, b: any) => {
+        const areaA = (a.width || 0) * (a.height || 0);
+        const areaB = (b.width || 0) * (b.height || 0);
+        return areaB - areaA;
       });
-    }
-
-    try {
-      const data = JSON.parse(stdout);
-      
-      // Parse available formats selectively for readability
-      const formats = (data.formats || [])
-        .filter((f: any) => f.vcodec !== "none" || f.acodec !== "none")
-        .map((f: any) => ({
-          formatId: f.format_id,
-          extension: f.ext,
-          resolution: f.resolution || (f.width && f.height ? `${f.width}x${f.height}` : "audio-only"),
-          videoCodec: f.vcodec || "none",
-          audioCodec: f.acodec || "none",
-          filesize: f.filesize || f.filesize_approx || 0,
-          note: f.format_note || "",
-        }));
-
-      let bestThumbnail = data.thumbnail || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&auto=format&fit=crop&q=60";
-      if (Array.isArray(data.thumbnails) && data.thumbnails.length > 0) {
-        const sorted = [...data.thumbnails].filter((t: any) => t.url).sort((a: any, b: any) => {
-          const areaA = (a.width || 0) * (a.height || 0);
-          const areaB = (b.width || 0) * (b.height || 0);
-          return areaB - areaA;
-        });
-        if (sorted[0]?.url) {
-          bestThumbnail = sorted[0].url;
-        }
+      if (sorted[0]?.url) {
+        bestThumbnail = sorted[0].url;
       }
-
-      res.json({
-        success: true,
-        metadata: {
-          title: data.title || "Unknown Media Source",
-          thumbnail: bestThumbnail,
-          duration: data.duration || 0,
-          extractor: data.extractor || "generic",
-          formats: formats.reverse(), // Prefer higher quality first
-          originalUrl: url,
-        },
-      });
-    } catch (e: any) {
-      res.status(500).json({ success: false, error: "JSON parsing error on source metadata stream" });
     }
-  });
+
+    res.json({
+      success: true,
+      metadata: {
+        title: data.title || "Unknown Media Source",
+        thumbnail: bestThumbnail,
+        duration: data.duration || 0,
+        extractor: data.extractor || "generic",
+        formats: formats.reverse(),
+        originalUrl: url,
+      },
+    });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: "JSON parsing error on source metadata stream" });
+  }
 });
 
 // 3b. Playlist metadata extraction
-app.post("/api/url/playlist", (req, res) => {
+app.post("/api/url/playlist", async (req, res) => {
   const { url } = req.body;
   if (!url) return res.status(400).json({ success: false, error: "URL is required" });
 
-  const ytDlp = spawn("yt-dlp", addCookiesArg([
+  const { stdout, stderr, code } = await runYtDlp([
     "-J",
     "--flat-playlist",
     "--no-playlist", "--playlist-items", "1:50",
     "--extractor-args", "youtube:player_client=tv;skip=webpage,js",
     url,
-  ]));
+  ]);
 
-  let stdout = "";
-  let stderr = "";
-  ytDlp.stdout.on("data", (data) => { stdout += data; });
-  ytDlp.stderr.on("data", (data) => { stderr += data; });
+  if (code !== 0) {
+    return res.status(500).json({ success: false, error: formatYtdlpError(stderr) });
+  }
+  try {
+    const data = JSON.parse(stdout);
+    const isPlaylist = data.extractor_key === "YoutubePlaylist" || data.playlist_count > 1;
+    const entries = (data.entries || []).slice(0, 50).map((e: any, i: number) => ({
+      index: i,
+      id: e.id || e.url,
+      title: e.title || `Item ${i + 1}`,
+      url: e.url || e.webpage_url,
+      duration: e.duration || 0,
+      thumbnail: e.thumbnail || data.thumbnail || "",
+    }));
 
-  ytDlp.on("close", (code) => {
-    if (code !== 0) {
-      return res.status(500).json({ success: false, error: formatYtdlpError(stderr) });
-    }
-    try {
-      const data = JSON.parse(stdout);
-      const isPlaylist = data.extractor_key === "YoutubePlaylist" || data.playlist_count > 1;
-      const entries = (data.entries || []).slice(0, 50).map((e: any, i: number) => ({
-        index: i,
-        id: e.id || e.url,
-        title: e.title || `Item ${i + 1}`,
-        url: e.url || e.webpage_url,
-        duration: e.duration || 0,
-        thumbnail: e.thumbnail || data.thumbnail || "",
-      }));
-
-      res.json({
-        success: true,
-        isPlaylist,
-        title: data.title || "Untitled Playlist",
-        count: entries.length,
-        entries,
-        thumbnail: data.thumbnail || "",
-        originalUrl: url,
-      });
-    } catch (e: any) {
-      res.status(500).json({ success: false, error: "Failed to parse playlist data" });
-    }
-  });
+    res.json({
+      success: true,
+      isPlaylist,
+      title: data.title || "Untitled Playlist",
+      count: entries.length,
+      entries,
+      thumbnail: data.thumbnail || "",
+      originalUrl: url,
+    });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: "Failed to parse playlist data" });
+  }
 });
 
 // 3c. Convert playlist — batch process and zip
@@ -594,23 +601,19 @@ app.post("/api/convert/playlist", async (req, res) => {
     fs.mkdirSync(itemDir, { recursive: true });
 
     try {
-      const selFormat = entry.formatId || formatId || "best";
+      const selFormat = entry.formatId || formatId || DEFAULT_FORMAT;
       const outExt = outputFormat || "mp4";
 
-      await new Promise<void>((resolve, reject) => {
-        const proc = spawn("yt-dlp", addCookiesArg([
-          "-f", selFormat,
-          "-o", path.join(itemDir, `input.%(ext)s`),
-          "--no-playlist",
-          "--extractor-args", "youtube:player_client=tv;skip=webpage,js",
-          entry.url,
-        ]));
-        let errData = "";
-        proc.stderr.on("data", (d) => { errData += d; });
-        proc.on("close", (code) => {
-          if (code !== 0) reject(new Error(formatYtdlpError(errData)));
-          else resolve();
-        });
+      await runYtDlp([
+        "-f", selFormat,
+        "-o", path.join(itemDir, `input.%(ext)s`),
+        "--write-subs", "--write-auto-subs", "--sub-langs", "all,-live_chat",
+        "--embed-subs",
+        "--no-playlist",
+        "--extractor-args", "youtube:player_client=tv;skip=webpage,js",
+        entry.url,
+      ]).then(({ stderr, code }) => {
+        if (code !== 0) throw new Error(formatYtdlpError(stderr));
       });
 
       const files = fs.readdirSync(itemDir);
@@ -626,7 +629,7 @@ app.post("/api/convert/playlist", async (req, res) => {
         ffmpegArgs.push("-vn", "-c:a", bitrate === "lossless" ? "flac" : "libmp3lame");
         if (bitrate && bitrate !== "lossless") ffmpegArgs.push("-b:a", bitrate);
       } else {
-        ffmpegArgs.push("-c:v", "libx264", "-preset", "fast");
+        ffmpegArgs.push("-c:v", "libx264", "-preset", "veryfast");
         if (videoQuality) ffmpegArgs.push("-crf", videoQuality);
         if (bitrate && bitrate !== "lossless") ffmpegArgs.push("-c:a", "aac", "-b:a", bitrate);
         ffmpegArgs.push("-c:s", "copy");
@@ -753,52 +756,69 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
     if (job.type === "url" && url) {
       job.inputName = `Downloading from URL...`;
       
-      const formatSelection = settings.selectedFormatId && settings.selectedFormatId !== "best"
+      const formatSelection = settings.selectedFormatId && settings.selectedFormatId !== "best" && settings.selectedFormatId !== DEFAULT_FORMAT
         ? settings.selectedFormatId
-        : "best";
+        : DEFAULT_FORMAT;
 
-      // Spawn yt-dlp to download selected stream (with thumbnail)
-      const ytdlpDownloadArgs = addCookiesArg([
+      const baseDownloadArgs = [
         "-f", formatSelection,
         "-o", path.join(jobDir, "input.%(ext)s"),
         "--write-thumbnail",
         "--convert-thumbnails", "jpg",
+        "--write-subs", "--write-auto-subs", "--sub-langs", "all,-live_chat",
+        "--embed-subs",
         "--no-playlist",
         "--extractor-args", "youtube:player_client=tv;skip=webpage,js",
         url,
-      ]);
-      const ytDlp = spawn("yt-dlp", ytdlpDownloadArgs);
+      ];
 
-      let ytdlpStderr = "";
-      ytDlp.stderr.on("data", (data) => {
-        ytdlpStderr += data.toString();
-      });
+      async function attemptDownload(useProxy: boolean): Promise<void> {
+        const attemptArgs = useProxy
+          ? [...baseDownloadArgs, "--proxy", PROXY_URL]
+          : addCookiesArg([...baseDownloadArgs]);
 
-      await new Promise<void>((resolve, reject) => {
-        ytDlp.stdout.on("data", (data) => {
-          const text = data.toString();
-          // Extract downloading speed and progress percentages
-          const progressMatch = text.match(/\[download\]\s+([\d\.]+)%/);
-          const speedMatch = text.match(/at\s+([^\s]+)/);
-          const etaMatch = text.match(/ETA\s+([^\s]+)/);
+        const ytDlp = spawn("yt-dlp", attemptArgs);
+        let ytdlpStderr = "";
 
-          if (progressMatch) {
-            const downloadPct = parseFloat(progressMatch[1]);
-            // Map yt-dlp download progress onto 0% - 40% range of the ultimate job progress
-            job.progress = Math.min(45, Math.round(downloadPct * 0.4));
-          }
-          if (speedMatch) job.speed = speedMatch[1];
-          if (etaMatch) job.eta = etaMatch[1];
+        ytDlp.stderr.on("data", (data) => {
+          ytdlpStderr += data.toString();
         });
 
-        ytDlp.on("close", (code) => {
-          if (code !== 0) {
-            reject(new Error(formatYtdlpError(ytdlpStderr)));
-          } else {
-            resolve();
-          }
+        await new Promise<void>((resolve, reject) => {
+          ytDlp.stdout.on("data", (data) => {
+            const text = data.toString();
+            const progressMatch = text.match(/\[download\]\s+([\d\.]+)%/);
+            const speedMatch = text.match(/at\s+([^\s]+)/);
+            const etaMatch = text.match(/ETA\s+([^\s]+)/);
+
+            if (progressMatch) {
+              const downloadPct = parseFloat(progressMatch[1]);
+              job.progress = Math.min(45, Math.round(downloadPct * 0.4));
+            }
+            if (speedMatch) job.speed = speedMatch[1];
+            if (etaMatch) job.eta = etaMatch[1];
+          });
+
+          ytDlp.on("close", (code) => {
+            if (code !== 0) {
+              reject(new Error(formatYtdlpError(ytdlpStderr)));
+            } else {
+              resolve();
+            }
+          });
         });
-      });
+      }
+
+      try {
+        await attemptDownload(false);
+      } catch (err) {
+        if (PROXY_URL) {
+          console.log("[yt-dlp] Cookies failed download, retrying through proxy...");
+          await attemptDownload(true);
+        } else {
+          throw err;
+        }
+      }
 
       // Find downloaded file with dynamic extension (exclude thumbnails)
       const files = fs.readdirSync(jobDir);
@@ -1031,6 +1051,9 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
       // Video options
       if (vCodec && vCodec !== "keep") {
         args.push("-c:v", vCodec);
+        if (vCodec === "libx264" || vCodec === "libx265") {
+          args.push("-preset", "veryfast");
+        }
       }
       if (settings.videoBitrate && settings.videoBitrate !== "keep") {
         args.push("-b:v", settings.videoBitrate);

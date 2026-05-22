@@ -1,5 +1,6 @@
-import { Layers, Activity, ServerCrash, Sun, Moon, Info, Wrench } from "lucide-react";
+import { Layers, Activity, ServerCrash, Sun, Moon, Info, Wrench, Cookie, X, AlertTriangle } from "lucide-react";
 import { useState, useRef } from "react";
+import { apiFetch } from "../api";
 
 interface HeaderProps {
   isServerOnline: boolean;
@@ -15,6 +16,41 @@ interface HeaderProps {
 export default function Header({ isServerOnline, serverInfo, theme, onToggleTheme, onOpenInfo }: HeaderProps) {
   const logoClickCount = useRef(0);
   const [logoClicks, setLogoClicks] = useState(0);
+  const [cookieModalOpen, setCookieModalOpen] = useState(false);
+  const [hasCookies, setHasCookies] = useState<boolean | null>(null);
+  const [cookieText, setCookieText] = useState("");
+  const [adminKey, setAdminKey] = useState(localStorage.getItem("transmux_admin_key") || "");
+  const [cookieStatus, setCookieStatus] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+  useState(() => {
+    apiFetch("/api/cookies").then(r => r.json()).then(d => {
+      setHasCookies(d.hasCookies);
+    }).catch(() => setHasCookies(false));
+  });
+
+  const handleSaveCookies = async () => {
+    if (!adminKey) {
+      setCookieStatus({ message: "Admin key is required", type: "error" });
+      return;
+    }
+    localStorage.setItem("transmux_admin_key", adminKey);
+    try {
+      const res = await apiFetch("/api/cookies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminKey}` },
+        body: JSON.stringify({ cookies: cookieText }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setHasCookies(true);
+        setCookieStatus({ message: "Cookies saved successfully!", type: "success" });
+      } else {
+        setCookieStatus({ message: data.error || "Failed to save cookies", type: "error" });
+      }
+    } catch {
+      setCookieStatus({ message: "Network error saving cookies", type: "error" });
+    }
+  };
 
   const handleLogoClick = () => {
     logoClickCount.current++;
@@ -27,6 +63,7 @@ export default function Header({ isServerOnline, serverInfo, theme, onToggleThem
   };
 
   return (
+    <>
     <header id="transmux-header" className="border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-50 py-4 px-6 sm:px-8">
       <div className="max-w-7xl mx-auto flex items-center justify-between">
         {/* Brand & Codename */}
@@ -54,6 +91,22 @@ export default function Header({ isServerOnline, serverInfo, theme, onToggleThem
 
         {/* Server Connection Badge & Theme Controller */}
         <div id="server-status" className="flex items-center gap-3">
+          {/* Cookie Config Button */}
+          <button
+            onClick={() => setCookieModalOpen(true)}
+            id="btn-cookie-config"
+            className={`p-2 rounded-xl border transition-colors cursor-pointer relative ${
+              hasCookies === false
+                ? "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400"
+                : "bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 border-slate-200 dark:border-slate-705 text-slate-600 dark:text-slate-300"
+            }`}
+            title={hasCookies === false ? "YouTube cookies not set — click to configure" : "YouTube Cookies"}
+          >
+            <Cookie className="h-4 w-4" />
+            {hasCookies === false && (
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-500 rounded-full animate-pulse" />
+            )}
+          </button>
           {/* Info Button */}
           {onOpenInfo && (
             <button
@@ -94,5 +147,78 @@ export default function Header({ isServerOnline, serverInfo, theme, onToggleThem
         </div>
       </div>
     </header>
+
+    {/* Cookie Configuration Modal */}
+    {cookieModalOpen && (
+      <div
+        className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-md"
+        onClick={() => setCookieModalOpen(false)}
+      >
+        <div
+          className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl text-slate-900 dark:text-slate-100"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Cookie className="h-5 w-5 text-slate-600 dark:text-slate-300" />
+              <h3 className="text-sm font-bold">YouTube Cookies</h3>
+            </div>
+            <button
+              onClick={() => { setCookieModalOpen(false); setCookieStatus(null); }}
+              className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors text-slate-400 cursor-pointer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="p-5 space-y-4">
+            {hasCookies === false && (
+              <div className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-lg px-3 py-2">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span>Cookies not configured. YouTube downloads may fail and fall back through proxy.</span>
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Admin Key</label>
+              <input
+                type="password"
+                value={adminKey}
+                onChange={(e) => setAdminKey(e.target.value)}
+                placeholder="Enter ADMIN_KEY from server"
+                className="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Netscape Cookie File Contents</label>
+              <textarea
+                value={cookieText}
+                onChange={(e) => setCookieText(e.target.value)}
+                placeholder="Paste the full content of your cookies.txt file here..."
+                rows={6}
+                className="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 font-mono resize-none"
+              />
+              <p className="text-[10px] text-slate-400 dark:text-slate-500">
+                Export cookies from browser extensions like "Get cookies.txt" for YouTube.
+              </p>
+            </div>
+            {cookieStatus && (
+              <div className={`text-xs px-3 py-2 rounded-lg ${
+                cookieStatus.type === "success"
+                  ? "bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900"
+                  : "bg-rose-50 dark:bg-rose-950/20 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-900"
+              }`}>
+                {cookieStatus.message}
+              </div>
+            )}
+            <button
+              onClick={handleSaveCookies}
+              className="w-full text-xs font-bold py-2.5 rounded-lg bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-950 hover:bg-slate-800 dark:hover:bg-slate-200 transition-colors cursor-pointer"
+            >
+              Save Cookies
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
