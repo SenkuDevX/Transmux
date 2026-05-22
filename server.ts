@@ -13,6 +13,7 @@ import { isS3Configured, uploadToS3, getSignedDownloadUrl, deleteFromS3 } from "
 dotenv.config();
 
 const app = express();
+app.set("trust proxy", 1);
 const PORT = parseInt(process.env.PORT || "3000", 10);
 const BACKEND_URL = process.env.BACKEND_URL || `http://0.0.0.0:${PORT}`;
 const USE_S3 = isS3Configured();
