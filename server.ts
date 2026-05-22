@@ -325,7 +325,7 @@ function addCookiesArg(args: string[]): string[] {
 }
 
 // Helper: spawn yt-dlp and capture output, with retry on stale cookies or proxy fallback
-const YTDLP_BASE = ["--no-check-certificates", "--impersonate", "chrome"];
+const YTDLP_BASE = ["--force-ipv4", "--impersonate", "chrome"];
 
 function execYtDlp(args: string[]): Promise<{ stdout: string; stderr: string; code: number }> {
   return new Promise((resolve) => {
@@ -503,7 +503,7 @@ app.post("/api/url/metadata", async (req, res) => {
     "-J",
     "--no-playlist",
     "--playlist-items", "1",
-    "--extractor-args", "youtube:skip=webpage,js",
+    "--extractor-args", "youtube:player_client=tv_embedded,web;skip=webpage,js",
     url,
   ]);
 
@@ -567,7 +567,7 @@ app.post("/api/url/playlist", async (req, res) => {
     "-J",
     "--flat-playlist",
     "--no-playlist", "--playlist-items", "1:50",
-    "--extractor-args", "youtube:skip=webpage,js",
+    "--extractor-args", "youtube:player_client=tv_embedded,web;skip=webpage,js",
     url,
   ]);
 
@@ -634,7 +634,7 @@ app.post("/api/convert/playlist", async (req, res) => {
         "--write-subs", "--write-auto-subs", "--sub-langs", "all,-live_chat",
         "--embed-subs",
         "--no-playlist",
-        "--extractor-args", "youtube:skip=webpage,js",
+        "--extractor-args", "youtube:player_client=tv_embedded,web;skip=webpage,js",
         entry.url,
       ]).then(({ stderr, code }) => {
         if (code !== 0) throw new Error(formatYtdlpError(stderr));
@@ -792,7 +792,7 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
         "--write-subs", "--write-auto-subs", "--sub-langs", "all,-live_chat",
         "--embed-subs",
         "--no-playlist",
-        "--extractor-args", "youtube:skip=webpage,js",
+        "--extractor-args", "youtube:player_client=tv_embedded,web;skip=webpage,js",
         url,
       ];
 
