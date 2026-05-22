@@ -59,6 +59,7 @@ const DATA_ROOT = fs.existsSync("/data") ? "/data" : path.join(process.cwd(), "t
 const tmpJobsDir = path.join(DATA_ROOT, "jobs");
 fs.mkdirSync(tmpJobsDir, { recursive: true });
 const COOKIES_FILE = path.join(DATA_ROOT, "cookies.txt");
+const COOKIES_FILE_PENDING = path.join(DATA_ROOT, "cookies_pending.txt");
 
 // On startup, write YOUTUBE_COOKIES env var to cookies file (if set)
 if (process.env.YOUTUBE_COOKIES) {
@@ -207,7 +208,7 @@ function probeMetadata(filePath: string): Promise<{ duration: number; width?: nu
         return resolve({ duration: 0 });
       }
       try {
-        const data = JSON.parse(stdout);
+    const data = JSON.parse(stdout);
         const formatDuration = parseFloat(data.format?.duration || "0");
         const videoStream = data.streams?.find((s: any) => s.codec_type === "video");
         const audioStream = data.streams?.find((s: any) => s.codec_type === "audio");
@@ -415,6 +416,25 @@ app.get("/api/cookies", (req, res) => {
   res.json({ success: true, hasCookies: exists });
 });
 
+// Pending cookie endpoint — extension sends cookies here before a job is created
+app.post("/api/cookies/pending", (req, res) => {
+  const { cookies } = req.body;
+  if (!cookies || typeof cookies !== "string") {
+    return res.status(400).json({ success: false, error: "cookies (string) is required" });
+  }
+  try {
+    // If global cookie file also exists, append to it; otherwise create fresh
+    if (fs.existsSync(COOKIES_FILE)) {
+      fs.writeFileSync(COOKIES_FILE, cookies, "utf-8");
+    }
+    fs.writeFileSync(COOKIES_FILE_PENDING, cookies, "utf-8");
+    console.log(`[Cookies] Pending cookies saved (${cookies.length} bytes)`);
+    res.json({ success: true, message: "Cookies saved. They will be used for the next request." });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: `Failed to save cookies: ${err.message}` });
+  }
+});
+
 // 2. Local File Upload
 app.post("/api/upload", upload.single("file"), async (req, res) => {
   try {
@@ -517,40 +537,50 @@ app.post("/api/url/metadata", async (req, res) => {
     return res.status(400).json({ success: false, error: "Invalid URL format" });
   }
 
-  // Spawn yt-dlp to inspect format offerings (no cookies — metadata only)
-  // Try web client first (full format list), fall back to tv_embedded if bot-blocked
-  let { stdout, stderr, code } = await execYtDlp([
-    "-J",
-    "--no-playlist",
-    "--playlist-items", "1",
-    "--extractor-args", META_EXTRACTOR,
-    url,
-  ]);
-
-  if (code !== 0 && (stderr.includes("Sign in to confirm") || stderr.includes("not a bot"))) {
-    console.log("[yt-dlp] Web client blocked, falling back to tv_embedded for metadata...");
-    const fallback = await execYtDlp([
-      "-J",
-      "--no-playlist",
-      "--playlist-items", "1",
-      "--extractor-args", DL_EXTRACTOR,
-      url,
-    ]);
-    if (fallback.code === 0) {
-      ({ stdout, stderr, code } = fallback);
-    }
+  // Spawn yt-dlp to inspect format offerings
+  // Strategy: web (no cookies) → web (with cookies) → tv_embedded (with cookies)
+  async function tryMetadata(clientArgs: string[]): Promise<{ stdout: string; stderr: string; code: number } | null> {
+    const result = await execYtDlp(["-J", "--no-playlist", "--playlist-items", "1", ...clientArgs, url]);
+    if (result.code === 0) return result;
+    if (!isBotError(result.stderr)) return result; // non-auth error → fail immediately
+    return null; // bot error → try next strategy
   }
 
-  if (code !== 0) {
+  // Strategy 1: web client, no cookies
+  let result = await tryMetadata(["--extractor-args", META_EXTRACTOR]);
+
+  // Strategy 2: web client + cookies
+  if (!result && (fs.existsSync(COOKIES_FILE) || fs.existsSync(COOKIES_FILE_PENDING))) {
+    const cookiesFile = fs.existsSync(COOKIES_FILE_PENDING) ? COOKIES_FILE_PENDING : COOKIES_FILE;
+    console.log("[yt-dlp] Retrying metadata with cookies...");
+    result = await tryMetadata(["--cookies", cookiesFile, "--extractor-args", META_EXTRACTOR]);
+  }
+
+  // Strategy 3: tv_embedded client + cookies
+  if (!result && fs.existsSync(COOKIES_FILE_PENDING)) {
+    console.log("[yt-dlp] Retrying metadata with tv_embedded client + cookies...");
+    result = await tryMetadata(["--cookies", COOKIES_FILE_PENDING, "--extractor-args", DL_EXTRACTOR]);
+  }
+
+  // Strategy 4: tv_embedded client, no cookies
+  if (!result) {
+    console.log("[yt-dlp] Last resort: tv_embedded client, no cookies...");
+    result = await tryMetadata(["--extractor-args", DL_EXTRACTOR]);
+  }
+
+  if (!result || result.code !== 0) {
+    const stderr = result?.stderr || "Unknown error";
     console.error(`yt-dlp error output: ${stderr}`);
-    return res.status(500).json({
+    const isAuthError = isBotError(stderr);
+    return res.status(isAuthError ? 401 : 500).json({
       success: false,
       error: formatYtdlpError(stderr),
+      waitingCookies: isAuthError,
     });
   }
 
   try {
-    const data = JSON.parse(stdout);
+    const data = JSON.parse(result!.stdout);
 
     const formats = (data.formats || [])
       .filter((f: any) => f.vcodec !== "none" || f.acodec !== "none")
