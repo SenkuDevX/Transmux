@@ -20,6 +20,7 @@ export interface MediaMetadata {
   audio?: { codec: string; sampleRate?: number; channels?: number } | null;
   format?: string;
   size?: number;
+  formatsLimited?: boolean; // true when metadata came from tv_embedded (limited to 360p)
 }
 
 export interface ConversionSettings {

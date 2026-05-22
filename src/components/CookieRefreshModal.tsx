@@ -41,14 +41,7 @@ export default function CookieRefreshModal({ jobId, backendUrl, onDismiss }: Pro
     setExtensionTried(true);
     setError("");
 
-    // Dispatch event for the Chrome extension content script
-    window.dispatchEvent(
-      new CustomEvent("TRANSMUX_REFRESH_COOKIES", {
-        detail: { backendUrl, jobId },
-      })
-    );
-
-    // Also try postMessage (standard cross-extension communication)
+    // Try extension via postMessage only (CustomEvent doesn't cross isolated world)
     window.postMessage(
       { type: "TRANSMUX_REFRESH_COOKIES", backendUrl, jobId },
       "*"
@@ -58,27 +51,26 @@ export default function CookieRefreshModal({ jobId, backendUrl, onDismiss }: Pro
     const handler = (event: MessageEvent) => {
       if (event.data?.type === "TRANSMUX_COOKIES_RESULT") {
         window.removeEventListener("message", handler);
-        window.removeEventListener("TRANSMUX_COOKIES_RESULT", handler as any);
         if (event.data.success) {
+          clearTimeout(fallbackTimeout);
           setMode("success");
           setTimeout(onDismiss, 2000);
         } else {
-          setError(event.data.error || "Extension failed");
+          setError(event.data.error || "Extension failed to send cookies");
           setMode("manual");
         }
       }
     };
     window.addEventListener("message", handler);
-    window.addEventListener("TRANSMUX_COOKIES_RESULT", handler as any);
 
-    // Fallback to manual after 3 seconds if no extension response
-    setTimeout(() => {
+    // Fallback to manual after 10 seconds if no extension response
+    const fallbackTimeout = setTimeout(() => {
       window.removeEventListener("message", handler);
-      window.removeEventListener("TRANSMUX_COOKIES_RESULT", handler as any);
       if (mode === "prompt") {
         setMode("manual");
+        setError("Extension did not respond. Paste cookies manually below.");
       }
-    }, 3000);
+    }, 10000);
   };
 
   return (

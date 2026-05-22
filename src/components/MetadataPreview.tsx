@@ -125,6 +125,12 @@ export default function MetadataPreview({ metadata, selectedFormatId, onFormatSe
             )}
           </div>
 
+          {metadata.formatsLimited && (
+            <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-xl px-4 py-2.5 text-xs text-amber-700 dark:text-amber-400">
+              Format information is limited — the server IP is being rate-limited. Use <span className="font-semibold">"Best Preset"</span> above to download the highest quality available. You can also use the extension to send cookies for full access.
+            </div>
+          )}
+
           <div id="formats-grid" className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
             {/* Direct Best Match Preset */}
             <div

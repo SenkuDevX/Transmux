@@ -42,7 +42,7 @@ const apiLimiter = rateLimit({
   message: { success: false, error: "Too many requests. Please slow down." },
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => req.path.startsWith("/api/job/"),
+  skip: (req) => req.path.startsWith("/api/job/") || req.path.startsWith("/api/health"),
 });
 app.use("/api", apiLimiter);
 
@@ -599,6 +599,15 @@ app.post("/api/url/metadata", async (req, res) => {
         note: f.format_note || "",
       }));
 
+    // Detect if we got limited formats (tv_embedded only returns up to 360p)
+    const highestRes = formats
+      .map((f: any) => {
+        const match = f.resolution?.match(/(\d+)p/);
+        return match ? parseInt(match[1], 10) : 0;
+      })
+      .reduce((max, v) => Math.max(max, v), 0);
+    const formatsLimited = highestRes <= 360;
+
     let bestThumbnail = data.thumbnail || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&auto=format&fit=crop&q=60";
     if (Array.isArray(data.thumbnails) && data.thumbnails.length > 0) {
       const sorted = [...data.thumbnails].filter((t: any) => t.url).sort((a: any, b: any) => {
@@ -620,6 +629,7 @@ app.post("/api/url/metadata", async (req, res) => {
         extractor: data.extractor || "generic",
         formats: formats.reverse(),
         originalUrl: url,
+        formatsLimited,
       },
     });
   } catch (e: any) {

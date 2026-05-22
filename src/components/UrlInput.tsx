@@ -77,12 +77,7 @@ export default function UrlInput({ onMetadataFetched, onUrlReset, activeUrl, onL
     setWaitingCookies(false);
     setErrorText("Requesting cookies from browser...");
 
-    // Try extension via postMessage + CustomEvent
-    window.dispatchEvent(
-      new CustomEvent("TRANSMUX_REFRESH_COOKIES", {
-        detail: { backendUrl: BACKEND_URL, jobId: "pending" },
-      })
-    );
+    // Try extension via postMessage
     window.postMessage(
       { type: "TRANSMUX_REFRESH_COOKIES", backendUrl: BACKEND_URL, jobId: "pending" },
       "*"
@@ -90,19 +85,19 @@ export default function UrlInput({ onMetadataFetched, onUrlReset, activeUrl, onL
 
     // Wait for extension response with timeout
     const result = await new Promise<boolean>((resolve) => {
-      const timeout = setTimeout(() => resolve(false), 4000);
+      const timeout = setTimeout(() => resolve(false), 10000);
       const handler = (event: MessageEvent) => {
         if (event.data?.type === "TRANSMUX_COOKIES_RESULT") {
           clearTimeout(timeout);
           window.removeEventListener("message", handler);
-          resolve(true);
+          resolve(event.data.success === true);
         }
       };
       window.addEventListener("message", handler);
     });
 
     if (!result) {
-      setErrorText("Extension not found. Use the cookie icon in the header to paste cookies manually, then try again.");
+      setErrorText("Extension did not respond. Use the 🔑 Admin Key panel in the header to paste cookies manually, then try again.");
       return;
     }
 
