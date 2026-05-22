@@ -325,11 +325,9 @@ function addCookiesArg(args: string[]): string[] {
 }
 
 // Helper: spawn yt-dlp and capture output, with optional cookie→proxy fallback
-const YTDLP_BASE = ["--impersonate", "chrome"];
-
 function execYtDlp(args: string[]): Promise<{ stdout: string; stderr: string; code: number }> {
   return new Promise((resolve) => {
-    const proc = spawn("yt-dlp", [...YTDLP_BASE, ...args]);
+    const proc = spawn("yt-dlp", args);
     let stdout = "", stderr = "";
     proc.stdout.on("data", (d: Buffer) => { stdout += d.toString(); });
     proc.stderr.on("data", (d: Buffer) => { stderr += d.toString(); });
@@ -776,8 +774,8 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
 
       async function attemptDownload(useProxy: boolean): Promise<void> {
         const attemptArgs = useProxy
-          ? [...YTDLP_BASE, ...baseDownloadArgs, "--proxy", PROXY_URL]
-          : [...YTDLP_BASE, ...addCookiesArg([...baseDownloadArgs])];
+          ? [...baseDownloadArgs, "--proxy", PROXY_URL]
+          : addCookiesArg([...baseDownloadArgs]);
 
         const ytDlp = spawn("yt-dlp", attemptArgs);
         let ytdlpStderr = "";
