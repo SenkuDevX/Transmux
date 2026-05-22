@@ -458,7 +458,7 @@ app.post("/api/url/metadata", async (req, res) => {
     "--playlist-items", "1",
     "--extractor-args", "youtube:player_client=android,tv",
     "--user-agent", "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.83 Mobile Safari/537.36",
-    "--impersonate", "android",
+    "--impersonate", "chrome",
     url,
   ]));
 
@@ -533,7 +533,7 @@ app.post("/api/url/playlist", (req, res) => {
     "--no-playlist", "--playlist-items", "1:50",
     "--extractor-args", "youtube:player_client=android,tv",
     "--user-agent", "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.83 Mobile Safari/537.36",
-    "--impersonate", "android",
+    "--impersonate", "chrome",
     url,
   ]));
 
@@ -608,7 +608,7 @@ app.post("/api/convert/playlist", async (req, res) => {
           "--no-playlist",
           "--extractor-args", "youtube:player_client=android,tv",
           "--user-agent", "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.83 Mobile Safari/537.36",
-          "--impersonate", "android",
+          "--impersonate", "chrome",
           entry.url,
         ]));
         let errData = "";
@@ -772,10 +772,9 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
         "--no-playlist",
         "--extractor-args", "youtube:player_client=android,tv",
         "--user-agent", "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.83 Mobile Safari/537.36",
-        "--impersonate", "android",
+        "--impersonate", "chrome",
         url,
       ]);
-
       const ytDlp = spawn("yt-dlp", ytdlpDownloadArgs);
 
       let ytdlpStderr = "";
