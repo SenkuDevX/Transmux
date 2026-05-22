@@ -16,11 +16,13 @@ RUN apt-get update && apt-get install -y \
     g++ \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip3 install --no-cache-dir \
-    "yt-dlp[default]"
-
+# Build curl_cffi from source BEFORE yt-dlp (prevents pre-built wheel with bundled OpenSSL 1.1)
 RUN PIP_NO_BINARY=curl_cffi pip3 install --no-cache-dir \
     "curl_cffi>=0.12,<0.13"
+
+# yt-dlp will detect the already-installed source-built curl_cffi and skip its bundled dep
+RUN pip3 install --no-cache-dir \
+    "yt-dlp[default]"
 
 ENV PYTHONUNBUFFERED=1
 
