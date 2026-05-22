@@ -458,6 +458,7 @@ app.post("/api/url/metadata", async (req, res) => {
     "--playlist-items", "1",
     "--extractor-args", "youtube:player_client=web;skip=js",
     "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "--impersonate", "chrome",
     url,
   ]));
 
@@ -532,6 +533,7 @@ app.post("/api/url/playlist", (req, res) => {
     "--no-playlist", "--playlist-items", "1:50",
     "--extractor-args", "youtube:player_client=web;skip=js",
     "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "--impersonate", "chrome",
     url,
   ]));
 
@@ -606,6 +608,7 @@ app.post("/api/convert/playlist", async (req, res) => {
           "--no-playlist",
           "--extractor-args", "youtube:player_client=web;skip=js",
           "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+          "--impersonate", "chrome",
           entry.url,
         ]));
         let errData = "";
@@ -769,6 +772,7 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
         "--no-playlist",
         "--extractor-args", "youtube:player_client=web;skip=js",
         "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        "--impersonate", "chrome",
         url,
       ]);
       const ytDlp = spawn("yt-dlp", ytdlpDownloadArgs);
