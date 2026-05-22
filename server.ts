@@ -328,9 +328,9 @@ app.get("/api/health", (req, res) => {
 });
 
 // Helper: spawn yt-dlp and capture output, with retry on stale cookies or proxy fallback
-const YTDLP_BASE = ["--force-ipv4", "--impersonate", "chrome"];
+const YTDLP_BASE = ["--impersonate", "Chrome-136"];
 const META_EXTRACTOR = "youtube:player_client=web;skip=webpage,js";
-const DL_EXTRACTOR = "youtube:player_client=tv_embedded,web;skip=webpage,js";
+const DL_EXTRACTOR = "youtube:player_client=android,web;skip=webpage,js";
 
 function addCookiesArg(args: string[], jobId?: string): string[] {
   // Prefer job-specific cookies if they exist
@@ -541,7 +541,7 @@ app.post("/api/url/metadata", async (req, res) => {
   }
 
   // Spawn yt-dlp to inspect format offerings
-  // Strategy: web (no cookies) → web (with cookies) → tv_embedded (with cookies)
+  // Strategy: web (no cookies) → web (with cookies) → android (with cookies)
   let lastStderr = "";
   async function tryMetadata(clientArgs: string[]): Promise<{ stdout: string; stderr: string; code: number } | null> {
     const result = await execYtDlp(["-J", "--no-playlist", "--playlist-items", "1", ...clientArgs, url]);
@@ -561,15 +561,15 @@ app.post("/api/url/metadata", async (req, res) => {
     result = await tryMetadata(["--cookies", cookiesFile, "--extractor-args", META_EXTRACTOR]);
   }
 
-  // Strategy 3: tv_embedded client + cookies
+  // Strategy 3: android client + cookies
   if (!result && fs.existsSync(COOKIES_FILE_PENDING)) {
-    console.log("[yt-dlp] Retrying metadata with tv_embedded client + cookies...");
+    console.log("[yt-dlp] Retrying metadata with android client + cookies...");
     result = await tryMetadata(["--cookies", COOKIES_FILE_PENDING, "--extractor-args", DL_EXTRACTOR]);
   }
 
-  // Strategy 4: tv_embedded client, no cookies
+  // Strategy 4: android client, no cookies
   if (!result) {
-    console.log("[yt-dlp] Last resort: tv_embedded client, no cookies...");
+    console.log("[yt-dlp] Last resort: android client, no cookies...");
     result = await tryMetadata(["--extractor-args", DL_EXTRACTOR]);
   }
 
@@ -599,7 +599,7 @@ app.post("/api/url/metadata", async (req, res) => {
         note: f.format_note || "",
       }));
 
-    // Detect if we got limited formats (tv_embedded only returns up to 360p)
+    // Detect if we got limited formats (android client may only return up to 360p when blocked)
     const highestRes = formats
       .map((f: any) => {
         const match = f.resolution?.match(/(\d+)p/);
