@@ -19,7 +19,7 @@ const BACKEND_URL = process.env.BACKEND_URL || `http://0.0.0.0:${PORT}`;
 const USE_S3 = isS3Configured();
 const ENGINE_ENABLED = process.env.STATUS !== "false";
 const PROXY_URL = process.env.PROXY_URL || "";
-const DEFAULT_FORMAT = "bestvideo[height<=1080][vcodec^=avc1]+bestaudio[ext=m4a]/best[height<=1080]";
+const DEFAULT_FORMAT = "bestvideo+bestaudio/best";
 
 // Enable JSON body rendering
 app.use(express.json());
@@ -115,6 +115,7 @@ interface JobState {
   inputPath: string | null;
   outputPath: string | null;
   s3Key: string | null; // S3 object key (if USE_S3)
+  subtitleFiles: string[]; // .vtt/.srt files from yt-dlp
 }
 
 const redisStatePath = path.join(DATA_ROOT, "redis_state.json");
@@ -316,16 +317,17 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// Helper: Add --cookies arg to yt-dlp args array if cookies file exists
+// Helper: spawn yt-dlp and capture output, with retry on stale cookies or proxy fallback
+const YTDLP_BASE = ["--force-ipv4", "--impersonate", "chrome"];
+const META_EXTRACTOR = "youtube:player_client=web;skip=webpage,js";
+const DL_EXTRACTOR = "youtube:player_client=tv_embedded,web;skip=webpage,js";
+
 function addCookiesArg(args: string[]): string[] {
   if (fs.existsSync(COOKIES_FILE)) {
     return [...args, "--cookies", COOKIES_FILE];
   }
   return args;
 }
-
-// Helper: spawn yt-dlp and capture output, with retry on stale cookies or proxy fallback
-const YTDLP_BASE = ["--force-ipv4", "--impersonate", "chrome"];
 
 function execYtDlp(args: string[]): Promise<{ stdout: string; stderr: string; code: number }> {
   return new Promise((resolve) => {
@@ -453,6 +455,7 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
         inputPath: inputPath,
         outputPath: null,
         s3Key: null,
+        subtitleFiles: [],
       };
 
     jobs.set(jobId, job);
@@ -498,12 +501,12 @@ app.post("/api/url/metadata", async (req, res) => {
     return res.status(400).json({ success: false, error: "Invalid URL format" });
   }
 
-  // Spawn yt-dlp to inspect format offerings
-  const { stdout, stderr, code } = await runYtDlp([
+  // Spawn yt-dlp to inspect format offerings (no cookies — metadata only)
+  const { stdout, stderr, code } = await execYtDlp([
     "-J",
     "--no-playlist",
     "--playlist-items", "1",
-    "--extractor-args", "youtube:player_client=tv_embedded,web;skip=webpage,js",
+    "--extractor-args", META_EXTRACTOR,
     url,
   ]);
 
@@ -563,11 +566,11 @@ app.post("/api/url/playlist", async (req, res) => {
   const { url } = req.body;
   if (!url) return res.status(400).json({ success: false, error: "URL is required" });
 
-  const { stdout, stderr, code } = await runYtDlp([
+  const { stdout, stderr, code } = await execYtDlp([
     "-J",
     "--flat-playlist",
     "--no-playlist", "--playlist-items", "1:50",
-    "--extractor-args", "youtube:player_client=tv_embedded,web;skip=webpage,js",
+    "--extractor-args", META_EXTRACTOR,
     url,
   ]);
 
@@ -634,7 +637,7 @@ app.post("/api/convert/playlist", async (req, res) => {
         "--write-subs", "--write-auto-subs", "--sub-langs", "all,-live_chat",
         "--embed-subs",
         "--no-playlist",
-        "--extractor-args", "youtube:player_client=tv_embedded,web;skip=webpage,js",
+        "--extractor-args", DL_EXTRACTOR,
         entry.url,
       ]).then(({ stderr, code }) => {
         if (code !== 0) throw new Error(formatYtdlpError(stderr));
@@ -747,6 +750,7 @@ app.post("/api/convert", async (req, res) => {
       inputPath: null,
       outputPath: null,
       s3Key: null,
+      subtitleFiles: [],
     };
     jobs.set(activeJobId, job);
   } else {
@@ -792,7 +796,7 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
         "--write-subs", "--write-auto-subs", "--sub-langs", "all,-live_chat",
         "--embed-subs",
         "--no-playlist",
-        "--extractor-args", "youtube:player_client=tv_embedded,web;skip=webpage,js",
+        "--extractor-args", DL_EXTRACTOR,
         url,
       ];
 
@@ -884,6 +888,10 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
           fs.copyFileSync(src, path.join(jobDir, "thumbnail.jpg"));
         }
       }
+
+      // Collect subtitle files downloaded alongside the media (store as relative filenames)
+      const SUB_EXTENSIONS = [".vtt", ".srt", ".ass", ".ssa", ".sub"];
+      job.subtitleFiles = files.filter(f => SUB_EXTENSIONS.includes(path.extname(f).toLowerCase()));
 
       // Probe stream duration
       const meta = await probeMetadata(job.inputPath);
@@ -1164,8 +1172,26 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
         } else {
           resolve();
         }
-      });
-    });
+  });
+});
+
+// 5a. Subtitle file download
+app.get("/api/job/subtitle/:id/:filename", (req, res) => {
+  const job = jobs.get(req.params.id);
+  if (!job) {
+    return res.status(404).json({ success: false, error: "Job not found" });
+  }
+  if (!job.subtitleFiles.includes(req.params.filename)) {
+    return res.status(404).json({ success: false, error: "Subtitle file not found" });
+  }
+  const filePath = path.join(tmpJobsDir, req.params.id, req.params.filename);
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ success: false, error: "Subtitle file has expired" });
+  }
+  res.setHeader("Content-Type", getMimeType(filePath));
+  res.setHeader("Content-Disposition", `inline; filename="${req.params.filename}"`);
+  res.sendFile(filePath);
+});
 
     // Verification check on output file size
     if (!fs.existsSync(outputPath)) {
@@ -1355,6 +1381,7 @@ app.get("/api/job/:id", (req, res) => {
       error: job.error,
       createdAt: job.createdAt,
       downloadUrl: job.downloadUrl,
+      subtitleFiles: job.subtitleFiles,
     },
   });
 });
