@@ -632,6 +632,7 @@ app.post("/api/convert/playlist", async (req, res) => {
         ffmpegArgs.push("-c:v", "libx264", "-preset", "fast");
         if (videoQuality) ffmpegArgs.push("-crf", videoQuality);
         if (bitrate && bitrate !== "lossless") ffmpegArgs.push("-c:a", "aac", "-b:a", bitrate);
+        ffmpegArgs.push("-c:s", "copy");
       }
       ffmpegArgs.push("-y", outputPath);
 
@@ -1056,6 +1057,9 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
         args.push("-c:v:1", "mjpeg");
         args.push("-disposition:v:1", "attached_pic");
       }
+
+      // Embed subtitles from source (copy without re-encode)
+      args.push("-c:s", "copy");
     }
 
     // Output target
