@@ -7,10 +7,11 @@ import { apiUrl } from "../api";
 interface ProgressCardProps {
   job: Job;
   onReset: () => void;
+  onCancel?: () => void;
   onPreview?: (id: string, name: string, size: number) => void;
 }
 
-export default function ProgressCard({ job, onReset, onPreview }: ProgressCardProps) {
+export default function ProgressCard({ job, onReset, onCancel, onPreview }: ProgressCardProps) {
   const [downloadName, setDownloadName] = useState("");
   const [copied, setCopied] = useState(false);
 
@@ -132,6 +133,18 @@ export default function ProgressCard({ job, onReset, onPreview }: ProgressCardPr
                 <p className="text-slate-800 dark:text-slate-200 font-semibold mt-0.5">{formatSize(job.inputSize)}</p>
               </div>
             </div>
+
+            {/* Cancel button for slow jobs */}
+            {onCancel && (
+              <div className="text-center pt-1">
+                <button
+                  onClick={onCancel}
+                  className="text-xs px-3 py-1.5 bg-rose-50 dark:bg-rose-950/20 hover:bg-rose-100 dark:hover:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 rounded-lg font-medium transition-all cursor-pointer"
+                >
+                  Cancel job
+                </button>
+              </div>
+            )}
           </div>
         )}
 

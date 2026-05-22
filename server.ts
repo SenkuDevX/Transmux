@@ -50,7 +50,7 @@ const apiLimiter = rateLimit({
   message: { success: false, error: "Too many requests. Please slow down." },
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => req.path.startsWith("/api/job/") || req.path.startsWith("/api/health"),
+  skip: (req) => req.path.startsWith("/job/") || req.path === "/health",
 });
 app.use("/api", apiLimiter);
 
@@ -131,6 +131,7 @@ interface JobState {
   cookieRetryCount: number;
   _settings?: any;
   _url?: string;
+  _currentProcess?: import("child_process").ChildProcess | null;
 }
 
 const redisStatePath = path.join(DATA_ROOT, "redis_state.json");
@@ -936,6 +937,23 @@ app.post("/api/cookies/:jobId", async (req, res) => {
   res.json({ success: true, upgradedFormat, formats: upgradedFormat ? newFormats : undefined });
 });
 
+// Cancel a running job
+app.post("/api/job/:jobId/cancel", async (req, res) => {
+  const { jobId } = req.params;
+  const job = jobs.get(jobId);
+  if (!job) {
+    return res.status(404).json({ success: false, error: "Job not found" });
+  }
+  if (job._currentProcess) {
+    try { job._currentProcess.kill("SIGTERM"); } catch {}
+    job._currentProcess = null;
+  }
+  job.status = "failed";
+  job.error = "Cancelled by user";
+  console.log(`[Job ${jobId}] Cancelled by user`);
+  res.json({ success: true });
+});
+
 // Helper: Process job lifecycle in background
 async function processMediaJob(job: JobState, settings: any, url?: string) {
   const jobDir = path.join(tmpJobsDir, job.id);
@@ -983,6 +1001,7 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
 
         async function attemptDownload(args: string[]): Promise<void> {
           const ytDlp = spawn("yt-dlp", args);
+          job._currentProcess = ytDlp;
           let ytdlpStderr = "";
 
           ytDlp.stderr.on("data", (data) => {
@@ -1005,6 +1024,7 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
             });
 
             ytDlp.on("close", (code) => {
+              job._currentProcess = null;
               if (code !== 0) {
                 const err = new Error(formatYtdlpError(ytdlpStderr));
                 (err as any).rawStderr = ytdlpStderr;
@@ -1359,6 +1379,7 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
     console.log(`Spawning FFmpeg of Job ${job.id} with options:`, args.join(" "));
 
     const ffmpeg = spawn("ffmpeg", args);
+    job._currentProcess = ffmpeg;
 
     let ffmpegStderr = "";
 
@@ -1390,6 +1411,7 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
       });
 
       ffmpeg.on("close", (code) => {
+        job._currentProcess = null;
         if (code !== 0) {
           reject(new Error(parseFfmpegError(ffmpegStderr)));
         } else {

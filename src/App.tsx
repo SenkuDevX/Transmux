@@ -382,6 +382,13 @@ export default function App() {
     setActiveJob((prev) => prev ? { ...prev, status: "failed", error: "Cookie refresh cancelled by user" } : prev);
   };
 
+  const handleCancelJob = async (jobId: string) => {
+    try {
+      await apiFetch(`/api/job/${jobId}/cancel`, { method: "POST" });
+    } catch {}
+    handleReset();
+  };
+
   const handleClearHistory = () => {
     localStorage.removeItem("transmux_journal");
     setHistory([]);
@@ -529,12 +536,19 @@ export default function App() {
                 <ProgressCard
                   job={activeJob}
                   onReset={handleReset}
+                  onCancel={() => handleCancelJob(activeJob.id)}
                   onPreview={(id, name, size) => setPreviewMedia({ id, name, size, isPublished: false })}
                 />
                 {showStallWarning && (
-                  <div className="bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-center">
+                  <div className="bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-center space-y-2">
                     <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">Server seems slow — please wait</p>
-                    <p className="text-[10px] text-amber-600 dark:text-amber-500 mt-0.5">The backend is still processing. You can wait or cancel and retry.</p>
+                    <p className="text-[10px] text-amber-600 dark:text-amber-500">The backend is still processing. You can wait or cancel.</p>
+                    <button
+                      onClick={() => handleCancelJob(activeJob.id)}
+                      className="text-xs px-3 py-1.5 bg-rose-100 dark:bg-rose-950/30 hover:bg-rose-200 dark:hover:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-400 rounded-lg font-medium transition-all cursor-pointer"
+                    >
+                      Cancel job
+                    </button>
                   </div>
                 )}
               </div>
