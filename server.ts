@@ -518,13 +518,28 @@ app.post("/api/url/metadata", async (req, res) => {
   }
 
   // Spawn yt-dlp to inspect format offerings (no cookies — metadata only)
-  const { stdout, stderr, code } = await execYtDlp([
+  // Try web client first (full format list), fall back to tv_embedded if bot-blocked
+  let { stdout, stderr, code } = await execYtDlp([
     "-J",
     "--no-playlist",
     "--playlist-items", "1",
     "--extractor-args", META_EXTRACTOR,
     url,
   ]);
+
+  if (code !== 0 && (stderr.includes("Sign in to confirm") || stderr.includes("not a bot"))) {
+    console.log("[yt-dlp] Web client blocked, falling back to tv_embedded for metadata...");
+    const fallback = await execYtDlp([
+      "-J",
+      "--no-playlist",
+      "--playlist-items", "1",
+      "--extractor-args", DL_EXTRACTOR,
+      url,
+    ]);
+    if (fallback.code === 0) {
+      ({ stdout, stderr, code } = fallback);
+    }
+  }
 
   if (code !== 0) {
     console.error(`yt-dlp error output: ${stderr}`);
@@ -1777,6 +1792,30 @@ setInterval(runFileCleanupService, 5 * 60 * 1000);
 // 8. Mount Vite Dev Middleware / Host static files in Production
 async function integrateViteAndStart() {
   const isCloudMode = process.env.CLOUD_MODE === "true";
+
+  // Diagnose yt-dlp impersonation support at startup
+  try {
+    const { stdout: listTargets } = await execYtDlp(["--list-impersonate-targets"]);
+    const hasChrome = listTargets.toLowerCase().includes("chrome");
+    console.log(`[yt-dlp] curl_cffi impersonation: ${hasChrome ? "AVAILABLE" : "NOT AVAILABLE"}`);
+    if (hasChrome) {
+      console.log(`[yt-dlp] Available targets: ${listTargets.trim().split("\n").slice(0, 10).join(", ")}`);
+    }
+  } catch (e: any) {
+    console.warn(`[yt-dlp] Could not list impersonate targets: ${e.message}`);
+  }
+
+  // Log cookie status
+  if (fs.existsSync(COOKIES_FILE)) {
+    const size = fs.statSync(COOKIES_FILE).size;
+    console.log(`[Cookies] Global cookies file present (${size} bytes)`);
+  } else {
+    console.log(`[Cookies] No global cookies file found`);
+  }
+
+  if (PROXY_URL) {
+    console.log(`[Proxy] Proxy URL configured, will use as fallback`);
+  }
 
   if (process.env.NODE_ENV !== "production") {
     // Vite Dev Mode configuration
