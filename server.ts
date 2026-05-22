@@ -324,7 +324,7 @@ function addCookiesArg(args: string[]): string[] {
   return args;
 }
 
-// Helper: spawn yt-dlp and capture output, with optional cookie→proxy fallback
+// Helper: spawn yt-dlp and capture output, with retry on stale cookies or proxy fallback
 function execYtDlp(args: string[]): Promise<{ stdout: string; stderr: string; code: number }> {
   return new Promise((resolve) => {
     const proc = spawn("yt-dlp", args);
@@ -335,12 +335,34 @@ function execYtDlp(args: string[]): Promise<{ stdout: string; stderr: string; co
   });
 }
 
-async function runYtDlp(baseArgs: string[], retryOnFail = true): Promise<{ stdout: string; stderr: string; code: number }> {
+function isBotError(stderr: string): boolean {
+  return stderr.includes("Sign in to confirm") || stderr.includes("not a bot");
+}
+
+async function runYtDlp(baseArgs: string[]): Promise<{ stdout: string; stderr: string; code: number }> {
+  // Attempt 1: with cookies
   let result = await execYtDlp(addCookiesArg([...baseArgs]));
-  if (result.code !== 0 && retryOnFail && PROXY_URL) {
-    console.log("[yt-dlp] Cookies failed, retrying through proxy...");
+
+  // If bot error and cookies exist, skip stale cookies and retry
+  if (result.code !== 0 && isBotError(result.stderr) && fs.existsSync(COOKIES_FILE)) {
+    console.log("[yt-dlp] Cookies rejected by YouTube (stale/expired), retrying without cookies...");
+    const stalePath = COOKIES_FILE + ".stale";
+    try { fs.renameSync(COOKIES_FILE, stalePath); } catch {}
+    result = await execYtDlp([...baseArgs]);
+    if (result.code === 0) {
+      console.log("[yt-dlp] Succeeded without cookies. Cookies have been marked stale.");
+      return result;
+    }
+    // Restore cookies if no-cookie attempt also failed
+    try { fs.renameSync(stalePath, COOKIES_FILE); } catch {}
+  }
+
+  // Attempt 2: through proxy if available
+  if (result.code !== 0 && PROXY_URL) {
+    console.log("[yt-dlp] Retrying through proxy...");
     result = await execYtDlp([...baseArgs, "--proxy", PROXY_URL]);
   }
+
   return result;
 }
 
@@ -772,12 +794,8 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
         url,
       ];
 
-      async function attemptDownload(useProxy: boolean): Promise<void> {
-        const attemptArgs = useProxy
-          ? [...baseDownloadArgs, "--proxy", PROXY_URL]
-          : addCookiesArg([...baseDownloadArgs]);
-
-        const ytDlp = spawn("yt-dlp", attemptArgs);
+      async function attemptDownload(args: string[]): Promise<void> {
+        const ytDlp = spawn("yt-dlp", args);
         let ytdlpStderr = "";
 
         ytDlp.stderr.on("data", (data) => {
@@ -801,7 +819,9 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
 
           ytDlp.on("close", (code) => {
             if (code !== 0) {
-              reject(new Error(formatYtdlpError(ytdlpStderr)));
+              const err = new Error(formatYtdlpError(ytdlpStderr));
+              (err as any).rawStderr = ytdlpStderr;
+              reject(err);
             } else {
               resolve();
             }
@@ -809,16 +829,36 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
         });
       }
 
-      try {
-        await attemptDownload(false);
-      } catch (err) {
-        if (PROXY_URL) {
-          console.log("[yt-dlp] Cookies failed download, retrying through proxy...");
-          await attemptDownload(true);
-        } else {
-          throw err;
+      // Try: with cookies → without cookies if stale → through proxy if configured
+      const downloadAttempts: string[][] = [
+        addCookiesArg([...baseDownloadArgs]),
+      ];
+
+      if (fs.existsSync(COOKIES_FILE)) {
+        downloadAttempts.push([...baseDownloadArgs]);
+      }
+      if (PROXY_URL) {
+        downloadAttempts.push([...baseDownloadArgs, "--proxy", PROXY_URL]);
+      }
+
+      let lastError: Error | null = null;
+      for (const attemptArgs of downloadAttempts) {
+        try {
+          await attemptDownload(attemptArgs);
+          lastError = null;
+          break;
+        } catch (err: any) {
+          lastError = err;
+          const rawStderr = err.rawStderr || err.message;
+          if (attemptArgs.includes("--cookies") && isBotError(rawStderr)) {
+            console.log("[yt-dlp] Cookies rejected by YouTube (stale/expired), skipping...");
+            const stalePath = COOKIES_FILE + ".stale";
+            try { fs.renameSync(COOKIES_FILE, stalePath); } catch {}
+          }
+          console.log(`[yt-dlp] Download attempt failed, trying next method...`);
         }
       }
+      if (lastError) throw lastError;
 
       // Find downloaded file with dynamic extension (exclude thumbnails)
       const files = fs.readdirSync(jobDir);
