@@ -4,6 +4,17 @@
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --color-slate-150: #e9eef4;
+  --color-slate-250: #d6dee8;
+  --color-slate-350: #afbccc;
+  --color-slate-450: #7c8ba1;
+  --color-slate-550: #55647a;
+  --color-slate-750: #283548;
+  --color-slate-850: #162032;
+  --color-slate-905: #080e20;
+  --color-slate-705: #2d3a4e;
+  --color-slate-805: #1b2538;
+  --color-slate-101: #f0f4f8;
 }
 
 @variant dark (&:where(.dark, .dark *));

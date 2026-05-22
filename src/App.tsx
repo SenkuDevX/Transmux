@@ -351,7 +351,7 @@ export default function App() {
   };
 
   return (
-    <div id="applet-viewport" className="min-h-screen flex flex-col font-sans relative bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+    <div id="applet-viewport" className="min-h-screen flex flex-col font-sans relative text-slate-900 dark:text-slate-100 transition-colors duration-300">
       
       {/* Corporate Header */}
       <Header isServerOnline={isServerOnline} serverInfo={serverInfo} theme={theme} onToggleTheme={toggleTheme} onOpenInfo={() => setShowInfoModal(true)} />
