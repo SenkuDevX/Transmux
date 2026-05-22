@@ -456,9 +456,8 @@ app.post("/api/url/metadata", async (req, res) => {
     "-J",
     "--no-playlist",
     "--playlist-items", "1",
-    "--extractor-args", "youtube:player_client=android,tv",
-    "--user-agent", "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.83 Mobile Safari/537.36",
-    "--impersonate", "chrome",
+    "--extractor-args", "youtube:player_client=web",
+    "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
     url,
   ]));
 
@@ -531,9 +530,8 @@ app.post("/api/url/playlist", (req, res) => {
     "-J",
     "--flat-playlist",
     "--no-playlist", "--playlist-items", "1:50",
-    "--extractor-args", "youtube:player_client=android,tv",
-    "--user-agent", "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.83 Mobile Safari/537.36",
-    "--impersonate", "chrome",
+    "--extractor-args", "youtube:player_client=web",
+    "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
     url,
   ]));
 
@@ -606,9 +604,8 @@ app.post("/api/convert/playlist", async (req, res) => {
           "-f", selFormat,
           "-o", path.join(itemDir, `input.%(ext)s`),
           "--no-playlist",
-          "--extractor-args", "youtube:player_client=android,tv",
-          "--user-agent", "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.83 Mobile Safari/537.36",
-          "--impersonate", "chrome",
+          "--extractor-args", "youtube:player_client=web",
+          "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
           entry.url,
         ]));
         let errData = "";
@@ -770,9 +767,8 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
         "--write-thumbnail",
         "--convert-thumbnails", "jpg",
         "--no-playlist",
-        "--extractor-args", "youtube:player_client=android,tv",
-        "--user-agent", "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.83 Mobile Safari/537.36",
-        "--impersonate", "chrome",
+        "--extractor-args", "youtube:player_client=web",
+        "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
         url,
       ]);
       const ytDlp = spawn("yt-dlp", ytdlpDownloadArgs);
