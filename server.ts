@@ -479,7 +479,7 @@ app.post("/api/url/metadata", async (req, res) => {
     "-J",
     "--no-playlist",
     "--playlist-items", "1",
-    "--extractor-args", "youtube:player_client=tv;skip=webpage,js",
+    "--extractor-args", "youtube:skip=webpage,js",
     url,
   ]);
 
@@ -543,7 +543,7 @@ app.post("/api/url/playlist", async (req, res) => {
     "-J",
     "--flat-playlist",
     "--no-playlist", "--playlist-items", "1:50",
-    "--extractor-args", "youtube:player_client=tv;skip=webpage,js",
+    "--extractor-args", "youtube:skip=webpage,js",
     url,
   ]);
 
@@ -610,7 +610,7 @@ app.post("/api/convert/playlist", async (req, res) => {
         "--write-subs", "--write-auto-subs", "--sub-langs", "all,-live_chat",
         "--embed-subs",
         "--no-playlist",
-        "--extractor-args", "youtube:player_client=tv;skip=webpage,js",
+        "--extractor-args", "youtube:skip=webpage,js",
         entry.url,
       ]).then(({ stderr, code }) => {
         if (code !== 0) throw new Error(formatYtdlpError(stderr));
@@ -768,7 +768,7 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
         "--write-subs", "--write-auto-subs", "--sub-langs", "all,-live_chat",
         "--embed-subs",
         "--no-playlist",
-        "--extractor-args", "youtube:player_client=tv;skip=webpage,js",
+        "--extractor-args", "youtube:skip=webpage,js",
         url,
       ];
 
