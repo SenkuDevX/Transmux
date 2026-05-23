@@ -66,6 +66,8 @@ app.use("/api", (req, res, next) => {
 const DATA_ROOT = fs.existsSync("/data") ? "/data" : path.join(process.cwd(), "tmp");
 const tmpJobsDir = path.join(DATA_ROOT, "jobs");
 fs.mkdirSync(tmpJobsDir, { recursive: true });
+const tmpPublishedDir = path.join(DATA_ROOT, "published");
+fs.mkdirSync(tmpPublishedDir, { recursive: true });
 const COOKIES_FILE = path.join(DATA_ROOT, "cookies.txt");
 const COOKIES_FILE_PENDING = path.join(DATA_ROOT, "cookies_pending.txt");
 
@@ -1128,22 +1130,45 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
         job.inputPath = path.join(jobDir, downloadedFile);
         job.inputSize = fs.statSync(job.inputPath).size;
         job.inputName = settings.mediaTitle || `url_source_${settings.outputFormat || 'converted'}${path.extname(downloadedFile)}`;
+        job.progress = 42;
+        job.phase = "processing";
 
-        // Download subtitles separately for reliable embedding
-        try {
-          const subDlArgs = [
-            "--write-subs", "--write-auto-subs", "--sub-langs", "all,-live_chat",
-            "--convert-subs", "srt",
-            "--skip-download",
-            "-o", path.join(jobDir, "subs.%(ext)s"),
-            "--no-playlist",
-            url,
-          ];
-          const subResult = await runYtDlp(addCookiesArg([...subDlArgs], job.id));
-          if (subResult.code !== 0) console.warn(`[Job ${job.id}] Subtitle download returned code ${subResult.code}`);
-        } catch (e) {
-          console.warn(`[Job ${job.id}] Subtitle download failed:`, e);
+        // Download subtitles separately with retry strategies
+        const subDlBase = [
+          "--write-subs", "--write-auto-subs", "--sub-langs", "all,-live_chat",
+          "--convert-subs", "srt",
+          "--skip-download",
+          "-o", path.join(jobDir, "subs.%(ext)s"),
+          "--no-playlist",
+          url,
+        ];
+        const subDlCookieArgs = ["--extractor-args", "youtube:player_client=web;skip=webpage,js"];
+        const subDlNoCookieArgs = ["--extractor-args", "youtube:player_client=android;skip=webpage,js"];
+        const subAttempts: string[][] = [
+          addCookiesArg([...YTDLP_BASE, ...subDlCookieArgs, ...subDlBase], job.id),
+        ];
+        if (fs.existsSync(COOKIES_FILE)) {
+          subAttempts.push([...YTDLP_BASE, ...subDlNoCookieArgs, ...subDlBase]);
         }
+        if (PROXY_URL) {
+          subAttempts.push([...YTDLP_BASE, ...subDlNoCookieArgs, ...subDlBase, "--proxy", PROXY_URL]);
+        }
+        job.progress = 43;
+        for (const subArgs of subAttempts) {
+          try {
+            const subResult = await new Promise<{ code: number }>((resolve) => {
+              const subProc = spawn("yt-dlp", subArgs);
+              let subErr = "";
+              subProc.stderr.on("data", (d: Buffer) => { subErr += d.toString(); });
+              subProc.on("close", (code) => resolve({ code: code ?? 1 }));
+            });
+            if (subResult.code === 0) break;
+            console.warn(`[Job ${job.id}] Subtitle attempt failed (trying next method)...`);
+          } catch (e) {
+            console.warn(`[Job ${job.id}] Subtitle attempt crashed:`, e);
+          }
+        }
+        job.progress = 44;
 
         // Look for yt-dlp thumbnail written alongside the media file
         const thumbnailFile = files.find(f => /\.(jpg|jpeg|png|webp)$/i.test(f) && f !== "thumbnail.jpg");
@@ -1282,6 +1307,7 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
     }
 
     // Phase 2: FFmpeg conversion
+    job.progress = 45;
     job.phase = "transcoding";
     const outputExt = (settings.outputFormat || "mp3").toLowerCase();
     const finalFilename = `output.${outputExt}`;
@@ -1765,8 +1791,6 @@ function resolveJobOutputPath(job: JobState): string | null {
 }
 
 // Permanent storage structures for published media entries
-const tmpPublishedDir = path.join(DATA_ROOT, "published");
-
 const publishedDbPath = path.join(DATA_ROOT, "published_gallery.json");
 
 interface PublishedItem {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Sliders, Video, Music, Scissors, VolumeX, RefreshCw, AlertTriangle, HelpCircle } from "lucide-react";
 import { ConversionSettings } from "../types";
+import CustomSelect from "./CustomSelect";
 
 function TooltipIcon({ text }: { text: string }) {
   const [show, setShow] = useState(false);
@@ -462,73 +463,73 @@ export default function TranscodeSettings({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <label className="text-[10px] font-mono text-slate-400">Target Video Codec<TooltipIcon text="The encoder used for video. H.264 has widest compatibility, H.265/HEVC saves space, VP9 for WebM, AV1 for best compression on modern devices." /></label>
-                <select
-                  id="select-video-codec"
+                <CustomSelect
                   value={videoCodec}
-                  onChange={(e) => setVideoCodec(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-slate-900 dark:focus:border-slate-400 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 outline-none"
-                >
-                  <option value="keep" className="bg-white dark:bg-slate-900">Keep Source Codec (Remux/Copy)</option>
-                  <option value="libx264" className="bg-white dark:bg-slate-900">H.264 (AVC - Universal standard)</option>
-                  <option value="libx265" className="bg-white dark:bg-slate-900">H.265 (HEVC - High efficiency)</option>
-                  <option value="libvpx-vp9" className="bg-white dark:bg-slate-900">VP9 (WebM web format)</option>
-                  <option value="libaom-av1" className="bg-white dark:bg-slate-900">AV1 (Next-Gen high compression ratio)</option>
-                  <option value="prores" className="bg-white dark:bg-slate-900">Apple ProRes (High-End Studio Archive)</option>
-                </select>
+                  onChange={setVideoCodec}
+                  options={[
+                    { value: "keep", label: "Keep Source Codec (Remux/Copy)" },
+                    { value: "libx264", label: "H.264 (AVC - Universal standard)" },
+                    { value: "libx265", label: "H.265 (HEVC - High efficiency)" },
+                    { value: "libvpx-vp9", label: "VP9 (WebM web format)" },
+                    { value: "libaom-av1", label: "AV1 (Next-Gen high compression ratio)" },
+                    { value: "prores", label: "Apple ProRes (High-End Studio Archive)" },
+                  ]}
+                  className="w-full"
+                />
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-[10px] font-mono text-slate-400">Resize Resolution<TooltipIcon text="Downscale or upscale the video. Keeping original resolution avoids quality loss. Scaling up (e.g. 720p → 1080p) does not add real detail." /></label>
-                <select
-                  id="select-resolution"
+                <CustomSelect
                   value={videoResolution}
-                  onChange={(e) => setVideoResolution(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-slate-900 dark:focus:border-slate-400 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 outline-none"
-                >
-                  <option value="keep" className="bg-white dark:bg-slate-900">Keep Original Resolution</option>
-                  <option value="3840x2160" className="bg-white dark:bg-slate-900">4K Ultra HD (3840x2160)</option>
-                  <option value="2560x1440" className="bg-white dark:bg-slate-900">2K QHD (2560x1440)</option>
-                  <option value="1920x1080" className="bg-white dark:bg-slate-900">1080p Full HD (1920x1080)</option>
-                  <option value="1280x720" className="bg-white dark:bg-slate-900">720p HD Ready (1280x720)</option>
-                  <option value="854x480" className="bg-white dark:bg-slate-900">480p Wide SD (854x480)</option>
-                  <option value="640x360" className="bg-white dark:bg-slate-900">360p Mobile SD (640x360)</option>
-                  <option value="426x240" className="bg-white dark:bg-slate-900">240p Retro Low SD (426x240)</option>
-                </select>
+                  onChange={setVideoResolution}
+                  options={[
+                    { value: "keep", label: "Keep Original Resolution" },
+                    { value: "3840x2160", label: "4K Ultra HD (3840x2160)" },
+                    { value: "2560x1440", label: "2K QHD (2560x1440)" },
+                    { value: "1920x1080", label: "1080p Full HD (1920x1080)" },
+                    { value: "1280x720", label: "720p HD Ready (1280x720)" },
+                    { value: "854x480", label: "480p Wide SD (854x480)" },
+                    { value: "640x360", label: "360p Mobile SD (640x360)" },
+                    { value: "426x240", label: "240p Retro Low SD (426x240)" },
+                  ]}
+                  className="w-full"
+                />
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-[10px] font-mono text-slate-400">Frame Rate (FPS)<TooltipIcon text="Number of frames per second. 24 is cinematic, 30 is standard web video, 60 is smooth for gaming/sports. Higher FPS = larger file size." /></label>
-                <select
-                  id="select-fps"
+                <CustomSelect
                   value={videoFps}
-                  onChange={(e) => setVideoFps(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-slate-900 dark:focus:border-slate-400 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 outline-none"
-                >
-                  <option value="keep" className="bg-white dark:bg-slate-900">Keep Original Framerate</option>
-                  <option value="120" className="bg-white dark:bg-slate-900">120 FPS (Ultra Smooth/High-Speed)</option>
-                  <option value="60" className="bg-white dark:bg-slate-900">60 FPS (Super Smooth)</option>
-                  <option value="30" className="bg-white dark:bg-slate-900">30 FPS (Standard Web)</option>
-                  <option value="24" className="bg-white dark:bg-slate-900">24 FPS (Cinematic standard)</option>
-                  <option value="15" className="bg-white dark:bg-slate-900">15 FPS (Time-lapse/Industrial)</option>
-                  <option value="12" className="bg-white dark:bg-slate-900">12 FPS (Retro/Stop-motion)</option>
-                </select>
+                  onChange={setVideoFps}
+                  options={[
+                    { value: "keep", label: "Keep Original Framerate" },
+                    { value: "120", label: "120 FPS (Ultra Smooth/High-Speed)" },
+                    { value: "60", label: "60 FPS (Super Smooth)" },
+                    { value: "30", label: "30 FPS (Standard Web)" },
+                    { value: "24", label: "24 FPS (Cinematic standard)" },
+                    { value: "15", label: "15 FPS (Time-lapse/Industrial)" },
+                    { value: "12", label: "12 FPS (Retro/Stop-motion)" },
+                  ]}
+                  className="w-full"
+                />
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-[10px] font-mono text-slate-400">Constant Rate Factor (CRF)<TooltipIcon text="Controls video quality vs file size. Lower = better quality but larger file. 18 is visually lossless, 23 is good balance, 28+ is smaller but lossy." /></label>
-                <select
-                  id="select-crf"
+                <CustomSelect
                   value={videoCrf}
-                  onChange={(e) => setVideoCrf(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-slate-900 dark:focus:border-slate-400 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 outline-none"
-                >
-                  <option value="keep" className="bg-white dark:bg-slate-900">Default Encoding Balance (23)</option>
-                  <option value="12" className="bg-white dark:bg-slate-900">Studio Archival Lossless (12)</option>
-                  <option value="18" className="bg-white dark:bg-slate-900">Visual lossless preset compressed (18)</option>
-                  <option value="21" className="bg-white dark:bg-slate-900">High visual output quality (21)</option>
-                  <option value="28" className="bg-white dark:bg-slate-900">Medium Compression output (28)</option>
-                  <option value="32" className="bg-white dark:bg-slate-900">High Space-saving Compression (32)</option>
-                </select>
+                  onChange={setVideoCrf}
+                  options={[
+                    { value: "keep", label: "Default Encoding Balance (23)" },
+                    { value: "12", label: "Studio Archival Lossless (12)" },
+                    { value: "18", label: "Visual lossless preset compressed (18)" },
+                    { value: "21", label: "High visual output quality (21)" },
+                    { value: "28", label: "Medium Compression output (28)" },
+                    { value: "32", label: "High Space-saving Compression (32)" },
+                  ]}
+                  className="w-full"
+                />
               </div>
             </div>
           </div>
@@ -542,75 +543,75 @@ export default function TranscodeSettings({
           
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-[10px] font-mono text-slate-400">Audio Codec<TooltipIcon text="The encoder used for audio. LAME for MP3, AAC for broad compatibility, Opus for best quality-per-bitrate, FLAC for lossless, PCM for uncompressed WAV." /></label>
-              <select
-                id="select-audio-codec"
-                value={audioCodec}
-                onChange={(e) => setAudioCodec(e.target.value)}
-                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-slate-900 dark:focus:border-slate-400 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 outline-none"
-              >
-                <option value="keep" className="bg-white dark:bg-slate-900">Default Core Codec</option>
-                {outputFormat === "mp3" && <option value="libmp3lame" className="bg-white dark:bg-slate-900">MP3 Encoder (LAME)</option>}
-                {(outputFormat === "aac" || outputFormat === "mp4") && <option value="aac" className="bg-white dark:bg-slate-900">AAC (Standard audio)</option>}
-                {outputFormat === "wav" && <option value="pcm_s16le" className="bg-white dark:bg-slate-900">Uncompressed WAV 16-bit PCM</option>}
-                {outputFormat === "ogg" && <option value="libvorbis" className="bg-white dark:bg-slate-900">Vorbis OGG Codec</option>}
-                <option value="opus" className="bg-white dark:bg-slate-900">Opus (Ultra high voice fidelity)</option>
-                <option value="flac" className="bg-white dark:bg-slate-900">FLAC (Lossless storage)</option>
-                <option value="ac3" className="bg-white dark:bg-slate-900">AC3 (Dolby Digital Surround)</option>
-                <option value="alac" className="bg-white dark:bg-slate-900">ALAC (Apple Lossless encoder)</option>
-              </select>
+                <label className="text-[10px] font-mono text-slate-400">Audio Codec<TooltipIcon text="The encoder used for audio. LAME for MP3, AAC for broad compatibility, Opus for best quality-per-bitrate, FLAC for lossless, PCM for uncompressed WAV." /></label>
+                <CustomSelect
+                  value={audioCodec}
+                  onChange={setAudioCodec}
+                  options={[
+                    { value: "keep", label: "Default Core Codec" },
+                    ...(outputFormat === "mp3" ? [{ value: "libmp3lame", label: "MP3 Encoder (LAME)" }] : []),
+                    ...((outputFormat === "aac" || outputFormat === "mp4") ? [{ value: "aac", label: "AAC (Standard audio)" }] : []),
+                    ...(outputFormat === "wav" ? [{ value: "pcm_s16le", label: "Uncompressed WAV 16-bit PCM" }] : []),
+                    ...(outputFormat === "ogg" ? [{ value: "libvorbis", label: "Vorbis OGG Codec" }] : []),
+                    { value: "opus", label: "Opus (Ultra high voice fidelity)" },
+                    { value: "flac", label: "FLAC (Lossless storage)" },
+                    { value: "ac3", label: "AC3 (Dolby Digital Surround)" },
+                    { value: "alac", label: "ALAC (Apple Lossless encoder)" },
+                  ]}
+                  className="w-full"
+                />
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[10px] font-mono text-slate-400">Audio Bitrate<TooltipIcon text="Amount of data used per second of audio. Higher = better quality but larger file. 320k is near-transparent, 192k is good for most, 128k is acceptable for background listening." /></label>
-              <select
-                id="select-audio-bitrate"
-                value={audioBitrate}
-                onChange={(e) => setAudioBitrate(e.target.value)}
-                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-slate-900 dark:focus:border-slate-400 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 outline-none"
-              >
-                <option value="keep" className="bg-white dark:bg-slate-900">Keep Original Bitrate</option>
-                <option value="512k" className="bg-white dark:bg-slate-900">512 kbps (Ultra Studio Surround)</option>
-                <option value="320k" className="bg-white dark:bg-slate-900">320 kbps (Studio standard)</option>
-                <option value="256k" className="bg-white dark:bg-slate-900">256 kbps (High Fidelity)</option>
-                <option value="192k" className="bg-white dark:bg-slate-900">192 kbps (Standard high)</option>
-                <option value="128k" className="bg-white dark:bg-slate-900">128 kbps (Standard efficient)</option>
-                <option value="96k" className="bg-white dark:bg-slate-900">96 kbps (Compressed background)</option>
-                <option value="64k" className="bg-white dark:bg-slate-900">64 kbps (Low-bandwidth mono)</option>
-              </select>
+                <label className="text-[10px] font-mono text-slate-400">Audio Bitrate<TooltipIcon text="Amount of data used per second of audio. Higher = better quality but larger file. 320k is near-transparent, 192k is good for most, 128k is acceptable for background listening." /></label>
+                <CustomSelect
+                  value={audioBitrate}
+                  onChange={setAudioBitrate}
+                  options={[
+                    { value: "keep", label: "Keep Original Bitrate" },
+                    { value: "512k", label: "512 kbps (Ultra Studio Surround)" },
+                    { value: "320k", label: "320 kbps (Studio standard)" },
+                    { value: "256k", label: "256 kbps (High Fidelity)" },
+                    { value: "192k", label: "192 kbps (Standard high)" },
+                    { value: "128k", label: "128 kbps (Standard efficient)" },
+                    { value: "96k", label: "96 kbps (Compressed background)" },
+                    { value: "64k", label: "64 kbps (Low-bandwidth mono)" },
+                  ]}
+                  className="w-full"
+                />
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[10px] font-mono text-slate-400">Audio Sample Rate<TooltipIcon text="Number of audio samples per second. 44.1kHz is CD quality, 48kHz is video standard, 96kHz is high-res. Higher = more detail but larger files. Humans can't hear above 20kHz." /></label>
-              <select
-                id="select-sample-rate"
-                value={audioSampleRate}
-                onChange={(e) => setAudioSampleRate(e.target.value)}
-                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-slate-900 dark:focus:border-slate-400 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 outline-none"
-              >
-                <option value="keep" className="bg-white dark:bg-slate-900">Keep Original Sample Rate</option>
-                <option value="96000" className="bg-white dark:bg-slate-900">96,000 Hz (High-Res Studio Master)</option>
-                <option value="48000" className="bg-white dark:bg-slate-900">48,000 Hz (Video Broadcast)</option>
-                <option value="44100" className="bg-white dark:bg-slate-900">44,100 Hz (CD Audio Standard)</option>
-                <option value="32000" className="bg-white dark:bg-slate-900">32,000 Hz (Voice compressed)</option>
-                <option value="22050" className="bg-white dark:bg-slate-900">22,050 Hz (Retro/Lofi acoustic rate)</option>
-                <option value="8000" className="bg-white dark:bg-slate-900">8,000 Hz (Telephony Narrowband)</option>
-              </select>
+                <label className="text-[10px] font-mono text-slate-400">Audio Sample Rate<TooltipIcon text="Number of audio samples per second. 44.1kHz is CD quality, 48kHz is video standard, 96kHz is high-res. Higher = more detail but larger files. Humans can't hear above 20kHz." /></label>
+                <CustomSelect
+                  value={audioSampleRate}
+                  onChange={setAudioSampleRate}
+                  options={[
+                    { value: "keep", label: "Keep Original Sample Rate" },
+                    { value: "96000", label: "96,000 Hz (High-Res Studio Master)" },
+                    { value: "48000", label: "48,000 Hz (Video Broadcast)" },
+                    { value: "44100", label: "44,100 Hz (CD Audio Standard)" },
+                    { value: "32000", label: "32,000 Hz (Voice compressed)" },
+                    { value: "22050", label: "22,050 Hz (Retro/Lofi acoustic rate)" },
+                    { value: "8000", label: "8,000 Hz (Telephony Narrowband)" },
+                  ]}
+                  className="w-full"
+                />
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[10px] font-mono text-slate-400">Audio Channels<TooltipIcon text="Number of audio channels. Mono (1) is a single speaker. Stereo (2) is left+right. 5.1 Surround (6) has front, rear, and subwoofer channels for surround sound systems." /></label>
-              <select
-                id="select-channels"
-                value={audioChannels}
-                onChange={(e) => setAudioChannels(e.target.value)}
-                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-slate-900 dark:focus:border-slate-400 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 outline-none"
-              >
-                <option value="keep" className="bg-white dark:bg-slate-900">Keep Original Channels</option>
-                <option value="6" className="bg-white dark:bg-slate-900">5.1 Surround Sound (6 Channels)</option>
-                <option value="2" className="bg-white dark:bg-slate-900">Stereo (2 Channels)</option>
-                <option value="1" className="bg-white dark:bg-slate-900">Mono (1 Channel)</option>
-              </select>
+                <label className="text-[10px] font-mono text-slate-400">Audio Channels<TooltipIcon text="Number of audio channels. Mono (1) is a single speaker. Stereo (2) is left+right. 5.1 Surround (6) has front, rear, and subwoofer channels for surround sound systems." /></label>
+                <CustomSelect
+                  value={audioChannels}
+                  onChange={setAudioChannels}
+                  options={[
+                    { value: "keep", label: "Keep Original Channels" },
+                    { value: "6", label: "5.1 Surround Sound (6 Channels)" },
+                    { value: "2", label: "Stereo (2 Channels)" },
+                    { value: "1", label: "Mono (1 Channel)" },
+                  ]}
+                  className="w-full"
+                />
             </div>
           </div>
         </div>

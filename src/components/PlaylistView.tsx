@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ListMusic, Download, Loader2, Music, Film, Check, AlertCircle } from "lucide-react";
 import { apiFetch } from "../api";
+import CustomSelect from "./CustomSelect";
 
 interface PlaylistEntry {
   index: number;
@@ -85,17 +86,18 @@ export default function PlaylistView({ playlist, onReset }: PlaylistViewProps) {
         </div>
 
         <div className="flex items-center gap-3 mb-4">
-          <select
+          <CustomSelect
             value={outputFormat}
-            onChange={(e) => setOutputFormat(e.target.value)}
-            className="text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 text-slate-700 dark:text-slate-300"
-          >
-            <option value="mp4">MP4</option>
-            <option value="mkv">MKV</option>
-            <option value="webm">WebM</option>
-            <option value="mp3">MP3 (audio)</option>
-            <option value="opus">Opus (audio)</option>
-          </select>
+            onChange={setOutputFormat}
+            options={[
+              { value: "mp4", label: "MP4" },
+              { value: "mkv", label: "MKV" },
+              { value: "webm", label: "WebM" },
+              { value: "mp3", label: "MP3 (audio)" },
+              { value: "opus", label: "Opus (audio)" },
+            ]}
+            className="w-28"
+          />
 
           <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
             <input type="checkbox" checked={audioOnly} onChange={(e) => setAudioOnly(e.target.checked)} />
@@ -109,16 +111,16 @@ export default function PlaylistView({ playlist, onReset }: PlaylistViewProps) {
               <span className="text-[10px] text-slate-400 font-mono w-6">{entry.index + 1}.</span>
               <span className="text-xs text-slate-700 dark:text-slate-300 flex-1 truncate">{entry.title}</span>
               <span className="text-[10px] text-slate-400 font-mono">{formatDuration(entry.duration)}</span>
-              <select
+              <CustomSelect
                 value={formatSelections[entry.index] || "best"}
-                onChange={(e) => setFormatSelections((p) => ({ ...p, [entry.index]: e.target.value }))}
-                className="text-[10px] bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-1 py-0.5 text-slate-600 dark:text-slate-400"
-              >
-                <option value="best">Best</option>
-                <option value="bestvideo+bestaudio">Best Video</option>
-                <option value="bestaudio">Best Audio</option>
-                <option value="worst">Worst</option>
-              </select>
+                onChange={(v) => setFormatSelections((p) => ({ ...p, [entry.index]: v }))}
+                options={[
+                  { value: "best", label: "Best" },
+                  { value: "bestvideo+bestaudio", label: "Best Video" },
+                  { value: "bestaudio", label: "Best Audio" },
+                ]}
+                className="w-24"
+              />
             </div>
           ))}
         </div>

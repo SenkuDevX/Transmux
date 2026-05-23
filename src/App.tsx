@@ -21,7 +21,7 @@ import { MediaMetadata, ConversionSettings, Job, ConversionHistoryItem } from ".
 const BACKEND_URL = import.meta.env.VITE_API_URL || window.location.origin;
 
 // ✏️ EDIT ANNOUNCEMENT BANNER: change this text or set to "" to hide
-const BANNER_MESSAGE = "";
+const BANNER_MESSAGE = "Transmux 3.0 — faster downloads, subtitle merge, quality validation, and mobile improvements!";
 
 export default function App() {
   // Theme Management

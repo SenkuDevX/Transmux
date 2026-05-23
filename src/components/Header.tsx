@@ -1,5 +1,6 @@
 import { Layers, Activity, ServerCrash, Sun, Moon, Info, HelpCircle, Wrench, Cookie, X, AlertTriangle } from "lucide-react";
 import { useState, useRef } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import { apiFetch } from "../api";
 
 interface HeaderProps {
@@ -162,15 +163,24 @@ export default function Header({ isServerOnline, serverInfo, theme, onToggleThem
     </header>
 
     {/* Cookie Configuration Modal */}
-    {cookieModalOpen && (
-      <div
-        className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-md"
-        onClick={() => setCookieModalOpen(false)}
-      >
-        <div
-          className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl text-slate-900 dark:text-slate-100"
-          onClick={(e) => e.stopPropagation()}
+    <AnimatePresence>
+      {cookieModalOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-md"
+          onClick={() => { setCookieModalOpen(false); setCookieStatus(null); }}
         >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.9, opacity: 0, y: 20 }}
+            transition={{ type: "spring", duration: 0.4, bounce: 0.3 }}
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl text-slate-900 dark:text-slate-100"
+            onClick={(e) => e.stopPropagation()}
+          >
           <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Cookie className="h-5 w-5 text-slate-600 dark:text-slate-300" />
@@ -229,9 +239,10 @@ export default function Header({ isServerOnline, serverInfo, theme, onToggleThem
               Save Cookies
             </button>
           </div>
-        </div>
-      </div>
-    )}
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
     </>
   );
 }
