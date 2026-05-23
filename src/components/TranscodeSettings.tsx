@@ -85,6 +85,12 @@ export default function TranscodeSettings({
         if (parts.length === 2) {
           width = parts[0];
           height = parts[1];
+        } else {
+          const hMatch = resolution.match(/^(\d+)\s*p$/i);
+          if (hMatch) {
+            height = parseInt(hMatch[1]);
+            width = Math.round(height * 16 / 9);
+          }
         }
       }
       sampleRate = sourceMetadata.audio?.sampleRate || null;
@@ -102,13 +108,28 @@ export default function TranscodeSettings({
           if (parts.length === 2) {
             width = parts[0];
             height = parts[1];
+          } else {
+            const hMatch = resolution.match(/^(\d+)\s*p$/i);
+            if (hMatch) {
+              height = parseInt(hMatch[1]);
+              width = Math.round(height * 16 / 9);
+            }
           }
         }
         codec = activeFmt.videoCodec && activeFmt.videoCodec !== "none" ? activeFmt.videoCodec : null;
         audioCodec = activeFmt.audioCodec && activeFmt.audioCodec !== "none" ? activeFmt.audioCodec : null;
-        // Search note for frame rate
-        const fpsMatch = activeFmt.note?.match(/(\d+)\s*fps/i) || activeFmt.resolution?.match(/@(\d+)fps/i);
-        if (fpsMatch) fps = parseInt(fpsMatch[1]);
+        // Frame rate: try direct fps field, then note patterns, then resolution patterns
+        fps = (activeFmt as any).fps || null;
+        if (!fps && activeFmt.note) {
+          const fpsMatch = activeFmt.note.match(/(\d+)\s*fps/i) || activeFmt.note.match(/(?:p|P)(\d{2})(?:\s|$|HDR|HD|\\b)/);
+          if (fpsMatch) fps = parseInt(fpsMatch[1]);
+        }
+        if (!fps && activeFmt.resolution) {
+          const fpsMatch = activeFmt.resolution.match(/@(\d+)/);
+          if (fpsMatch) fps = parseInt(fpsMatch[1]);
+        }
+        // Default to 30fps for YouTube video formats
+        if (!fps && resolution && resolution !== "audio-only") fps = 30;
       }
     }
     return { resolution, width, height, fps, sampleRate, channels, codec, audioCodec };

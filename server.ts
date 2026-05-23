@@ -71,6 +71,17 @@ fs.mkdirSync(tmpPublishedDir, { recursive: true });
 const COOKIES_FILE = path.join(DATA_ROOT, "cookies.txt");
 const COOKIES_FILE_PENDING = path.join(DATA_ROOT, "cookies_pending.txt");
 
+// Check if aria2c is available for faster parallel downloads
+let HAS_ARIA2 = false;
+try {
+  const { spawnSync } = require("child_process");
+  const result = spawnSync("aria2c", ["--version"], { stdio: "pipe", timeout: 3000 });
+  HAS_ARIA2 = result.status === 0;
+  if (HAS_ARIA2) console.log("[Downloader] aria2c detected — will use for faster parallel downloads");
+} catch {
+  console.log("[Downloader] aria2c not found — using yt-dlp's built-in downloader");
+}
+
 // On startup, write YOUTUBE_COOKIES env var to cookies file (if set)
 if (process.env.YOUTUBE_COOKIES) {
   try {
@@ -754,6 +765,7 @@ app.post("/api/convert/playlist", async (req, res) => {
         "-f", selFormat,
         "-o", path.join(itemDir, `input.%(ext)s`),
         "--concurrent-fragments", "16",
+        ...(HAS_ARIA2 ? ["--downloader", "aria2c", "--downloader-args", "aria2c:-x16 -s16 -k1M"] : []),
         "--write-subs", "--write-auto-subs", "--sub-langs", "all,-live_chat",
         "--convert-subs", "srt",
         "--no-playlist",
@@ -1023,6 +1035,7 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
         const baseDownloadArgs = [
           "-f", formatSelection,
           "--concurrent-fragments", "16",
+          ...(HAS_ARIA2 ? ["--downloader", "aria2c", "--downloader-args", "aria2c:-x16 -s16 -k1M"] : []),
           "-o", path.join(jobDir, "input.%(ext)s"),
           "--write-thumbnail",
           "--convert-thumbnails", "jpg",
