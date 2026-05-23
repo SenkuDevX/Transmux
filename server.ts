@@ -644,6 +644,7 @@ app.post("/api/url/metadata", async (req, res) => {
       success: true,
       metadata: {
         title: data.title || "Unknown Media Source",
+        uploader: data.uploader || data.channel || data.creator || "",
         thumbnail: bestThumbnail,
         duration: data.duration || 0,
         extractor: data.extractor || "generic",
@@ -1102,7 +1103,7 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
         }
 
         // If all attempts failed and it looks like an auth/bot issue, pause for cookie refresh
-        if (lastError && allBotErrors && job.cookieRetryCount < 2) {
+        if (lastError && allBotErrors && job.cookieRetryCount < 5) {
           console.log(`[Job ${job.id}] All attempts blocked by YouTube auth. Requesting cookie refresh from user...`);
           job.status = "waiting_cookies";
           job.waitingCookies = true;
@@ -1324,8 +1325,9 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
       : job.inputName
         ? path.basename(job.inputName, path.extname(job.inputName)).replace(/_/g, " ").replace(/^url_source_/, "")
         : "Converted Stream";
+    const mediaArtist = settings.mediaUploader || mediaTitle;
     args.push("-metadata", `title=${mediaTitle}`);
-    args.push("-metadata", `artist=${mediaTitle}`);
+    args.push("-metadata", `artist=${mediaArtist}`);
     args.push("-metadata", "comment=Converted via Transmux");
 
     if (isAudioOutput) {
@@ -1614,7 +1616,7 @@ app.get("/api/job/subtitle/:id/:filename", (req, res) => {
     job.progress = 100;
     job.speed = "completed";
     job.eta = "done";
-    job.outputName = `transmuxed_${path.basename(job.inputName, path.extname(job.inputName))}.${outputExt}`;
+    job.outputName = `${path.basename(job.inputName, path.extname(job.inputName)).replace(/_/g, " ")}.${outputExt}`;
     if (fs.existsSync(outputPath)) {
       const finalStat = fs.statSync(outputPath);
       job.outputSize = finalStat.size;

@@ -7,11 +7,12 @@ interface PreviewPopupProps {
   mediaId: string;
   filename: string;
   size: number;
+  thumbnailUrl?: string;
   isPublished?: boolean;
   onClose: () => void;
 }
 
-export default function PreviewPopup({ mediaId, filename, size, isPublished = false, onClose }: PreviewPopupProps) {
+export default function PreviewPopup({ mediaId, filename, size, thumbnailUrl, isPublished = false, onClose }: PreviewPopupProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -56,7 +57,9 @@ export default function PreviewPopup({ mediaId, filename, size, isPublished = fa
               sum += dataArray[i * binsPerBar + j];
             }
             const avg = sum / binsPerBar;
-            return Math.max(4, (avg / 255) * 84 + 4);
+            // Gain curve: higher bars (high frequencies) get boosted so last bars also move
+            const gain = 0.3 + (i / BAR_COUNT) * 1.7;
+            return Math.max(4, Math.min(96, (avg / 255) * 84 * gain + 4));
           }
           // Idle animation: gentle wave
           const idle = Math.sin(Date.now() / 300 + i * 0.5) * 3 + 8;
@@ -278,6 +281,20 @@ export default function PreviewPopup({ mediaId, filename, size, isPublished = fa
                 onEnded={() => setIsPlaying(false)}
                 className="hidden"
               />
+
+              {/* Album art — rotating disc when playing, static squircle when paused */}
+              {thumbnailUrl && (
+                <div className="flex justify-center mb-4">
+                  <div
+                    className="w-36 h-36 rounded-full overflow-hidden border-2 border-slate-200 dark:border-slate-700 shadow-lg"
+                    style={{
+                      animation: isPlaying ? "spin 8s linear infinite" : "none",
+                    }}
+                  >
+                    <img src={thumbnailUrl} alt="" className="w-full h-full object-cover" />
+                  </div>
+                </div>
+              )}
 
               {/* Spectacular pulsating visual sound waves */}
               <div className="flex items-center justify-center gap-[3px] h-28 mb-2">

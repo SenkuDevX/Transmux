@@ -47,6 +47,7 @@ export default function App() {
     id: string;
     name: string;
     size: number;
+    thumbnailUrl?: string;
     isPublished: boolean;
   } | null>(null);
 
@@ -261,6 +262,7 @@ export default function App() {
         selectedFormatId,
         thumbnailUrl: metadata?.thumbnail || "",
         mediaTitle: metadata?.title || "",
+        mediaUploader: metadata?.uploader || "",
       },
     };
 
@@ -647,6 +649,7 @@ export default function App() {
           mediaId={previewMedia.id}
           filename={previewMedia.name}
           size={previewMedia.size}
+          thumbnailUrl={previewMedia.thumbnailUrl}
           isPublished={previewMedia.isPublished}
           onClose={() => setPreviewMedia(null)}
         />

@@ -10,6 +10,7 @@ export interface MediaFormat {
 
 export interface MediaMetadata {
   title: string;
+  uploader?: string;
   thumbnail: string;
   duration: number; // in seconds
   extractor: string;
@@ -41,6 +42,7 @@ export interface ConversionSettings {
   selectedFormatId: string; // for yt-dlp select formats
   thumbnailUrl?: string; // cover art URL to embed in audio
   mediaTitle?: string; // original media title for metadata tags
+  mediaUploader?: string; // uploader/channel name for artist metadata
 }
 
 export interface Job {
