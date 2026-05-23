@@ -337,7 +337,7 @@ app.get("/api/health", (req, res) => {
 });
 
 // Helper: spawn yt-dlp and capture output, with retry on stale cookies or proxy fallback
-const YTDLP_BASE = ["--impersonate", "Chrome-136", "--no-check-formats"];
+const YTDLP_BASE = ["--no-check-formats"];
 const META_EXTRACTOR = "youtube:player_client=web_embedded;skip=webpage,js";
 const DL_EXTRACTOR = "youtube:player_client=web;skip=webpage,js";
 const DL_EXTRACTOR_NO_COOKIES = "youtube:player_client=android;skip=webpage,js";
@@ -559,35 +559,26 @@ app.post("/api/url/metadata", async (req, res) => {
   }
 
   // Spawn yt-dlp to inspect format offerings
-  // Strategy: web (no cookies) → web (with cookies) → android (with cookies)
+  // Strategy: web (no cookies) → web (with cookies) → android (with cookies) → android (no cookies)
   let lastStderr = "";
   async function tryMetadata(clientArgs: string[]): Promise<{ stdout: string; stderr: string; code: number } | null> {
     const result = await execYtDlp(["-J", "--no-playlist", "--playlist-items", "1", ...clientArgs, url]);
     if (result.code === 0) return result;
-    if (!isBotError(result.stderr)) return result; // non-auth error → fail immediately
-    lastStderr = result.stderr; // save for error reporting
-    return null; // bot error → try next strategy
+    lastStderr = result.stderr;
+    return null; // always continue to next strategy on any error
   }
 
-  // Strategy 1: web client, no cookies
-  let result = await tryMetadata(["--extractor-args", META_EXTRACTOR]);
-
-  // Strategy 2: web client + cookies
-  if (!result && (fs.existsSync(COOKIES_FILE) || fs.existsSync(COOKIES_FILE_PENDING))) {
-    const cookiesFile = fs.existsSync(COOKIES_FILE_PENDING) ? COOKIES_FILE_PENDING : COOKIES_FILE;
-    console.log("[yt-dlp] Retrying metadata with cookies...");
-    result = await tryMetadata(["--cookies", cookiesFile, "--extractor-args", META_EXTRACTOR]);
+  // Strategy 1: web client + cookies (most likely to work from HF Spaces)
+  let result: Awaited<ReturnType<typeof tryMetadata>> = null;
+  const cookiesToTry = [COOKIES_FILE, COOKIES_FILE_PENDING].filter((f) => fs.existsSync(f));
+  if (cookiesToTry.length > 0) {
+    console.log("[yt-dlp] Trying metadata with cookies...");
+    result = await tryMetadata(["--cookies", cookiesToTry[0], "--extractor-args", META_EXTRACTOR]);
   }
 
-  // Strategy 3: web client + pending cookies
-  if (!result && fs.existsSync(COOKIES_FILE_PENDING)) {
-    console.log("[yt-dlp] Retrying metadata with web client + pending cookies...");
-    result = await tryMetadata(["--cookies", COOKIES_FILE_PENDING, "--extractor-args", DL_EXTRACTOR]);
-  }
-
-  // Strategy 4: android client, no cookies
+  // Strategy 2: android client, no cookies (fallback for limited 360p listing)
   if (!result) {
-    console.log("[yt-dlp] Last resort: android client, no cookies...");
+    console.log("[yt-dlp] Fallback: android client, no cookies...");
     result = await tryMetadata(["--extractor-args", DL_EXTRACTOR_NO_COOKIES]);
   }
 
@@ -886,55 +877,52 @@ app.post("/api/cookies/:jobId", async (req, res) => {
   fs.writeFileSync(cookiesPath, cookies);
   console.log(`[Cookies] Received fresh cookies for job ${jobId} (${cookies.length} bytes)`);
 
-  // Re-extract metadata with fresh cookies to check if better formats are now available
-  let upgradedFormat = false;
-  let newFormats: any[] | null = null;
+  // Respond IMMEDIATELY — metadata re-extraction runs in background
+  res.json({ success: true });
+
+  // Background: re-extract metadata with fresh cookies to check if better formats are now available
   if (job._url) {
-    try {
-      const metaResult = await execYtDlp(["-J", "--no-playlist", "--playlist-items", "1",
-        "--cookies", cookiesPath,
-        "--extractor-args", META_EXTRACTOR,
-        job._url]);
-      if (metaResult.code === 0) {
-        const data = JSON.parse(metaResult.stdout);
-        const formats = (data.formats || [])
-          .filter((f: any) => f.url || f.manifest_url)
-          .map((f: any) => ({
-            formatId: f.format_id,
-            ext: f.ext,
-            resolution: f.height ? `${f.height}p` : (f.format_note || "audio"),
-            filesize: f.filesize || f.filesize_approx || 0,
-            note: f.format_note || "",
-          }));
-        const highestRes = formats
-          .map((f: any) => {
-            const match = f.resolution?.match(/(\d+)p/);
-            return match ? parseInt(match[1], 10) : 0;
-          })
-          .reduce((max, v) => Math.max(max, v), 0);
-        if (highestRes > 360) {
-          upgradedFormat = true;
-          newFormats = formats;
-          // Upgrade to best available format
-          if (job._settings) {
-            job._settings.selectedFormatId = "bestvideo+bestaudio/best";
+    (async () => {
+      try {
+        const metaResult = await execYtDlp(["-J", "--no-playlist", "--playlist-items", "1",
+          "--cookies", cookiesPath,
+          "--extractor-args", META_EXTRACTOR,
+          job._url]);
+        if (metaResult.code === 0) {
+          const data = JSON.parse(metaResult.stdout);
+          const formats = (data.formals || [])
+            .filter((f: any) => f.url || f.manifest_url)
+            .map((f: any) => ({
+              formatId: f.format_id,
+              ext: f.ext,
+              resolution: f.height ? `${f.height}p` : (f.format_note || "audio"),
+              filesize: f.filesize || f.filesize_approx || 0,
+              note: f.format_note || "",
+            }));
+          const highestRes = formats
+            .map((f: any) => {
+              const match = f.resolution?.match(/(\d+)p/);
+              return match ? parseInt(match[1], 10) : 0;
+            })
+            .reduce((max, v) => Math.max(max, v), 0);
+          if (highestRes > 360) {
+            if (job._settings) {
+              job._settings.selectedFormatId = "bestvideo+bestaudio/best";
+            }
+            console.log(`[Job ${jobId}] Re-extracted metadata with fresh cookies: found formats up to ${highestRes}p`);
           }
-          console.log(`[Job ${jobId}] Re-extracted metadata with fresh cookies: found formats up to ${highestRes}p`);
         }
+      } catch (e: any) {
+        console.warn(`[Job ${jobId}] Metadata re-extraction failed: ${e.message?.slice(0, 100)}`);
       }
-    } catch (e: any) {
-      console.warn(`[Job ${jobId}] Metadata re-extraction failed: ${e.message?.slice(0, 100)}`);
-    }
+    })();
   }
 
-  // Resume job if waiting for cookies
+  // Resume job if waiting for cookies (fire-and-forget)
   if (job.waitingCookies && job.status === "waiting_cookies") {
     job.cookieRetryCount = (job.cookieRetryCount || 0) + 1;
-    // Fire-and-forget retry in background
     processMediaJob(job, job._settings, job._url);
   }
-
-  res.json({ success: true, upgradedFormat, formats: upgradedFormat ? newFormats : undefined });
 });
 
 // Cancel a running job
@@ -1036,9 +1024,9 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
           });
         }
 
-        // Try: with cookies → without cookies if stale → through proxy if configured
+        // Try: with cookies + impersonation → without cookies → through proxy if configured
         const downloadAttempts: string[][] = [
-          addCookiesArg([...YTDLP_BASE, ...dlCookieArgs, ...baseDownloadArgs], job.id),
+          addCookiesArg(["--impersonate", "Chrome-136", ...YTDLP_BASE, ...dlCookieArgs, ...baseDownloadArgs], job.id),
         ];
 
         if (fs.existsSync(COOKIES_FILE)) {

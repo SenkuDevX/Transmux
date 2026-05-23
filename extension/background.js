@@ -67,13 +67,3 @@ chrome.runtime.onConnect.addListener((port) => {
       .catch((err) => port.postMessage({ success: false, error: err.message }));
   });
 });
-      })
-      .then((res) => res.json())
-      .then((data) => {
-        chrome.storage.local.set({ lastSent: Date.now(), lastSentStr: new Date().toLocaleString() });
-        sendResponse({ success: true, data });
-      })
-      .catch((err) => sendResponse({ success: false, error: err.message }));
-    return true; // Keep channel open for async response
-  }
-});

@@ -4,7 +4,8 @@
   "version": "1.0",
   "description": "Securely sends YouTube cookies to Transmux when authentication is needed.",
   "permissions": [
-    "cookies"
+    "cookies",
+    "storage"
   ],
   "host_permissions": [
     "https://*.youtube.com/*"
