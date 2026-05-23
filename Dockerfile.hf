@@ -8,12 +8,12 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip3 install --no-cache-dir \
+RUN pip3 install --break-system-packages --no-cache-dir \
     "yt-dlp[default]"
 
-# Uninstall curl_cffi — its bundled OpenSSL 1.1 conflicts with system OpenSSL 3.x
-# yt-dlp will fall back to Python's native requests library
-RUN pip3 uninstall -y curl_cffi
+# yt-dlp 2026.3.17 doesn't bundle curl_cffi — install separately for impersonation
+RUN pip3 install --break-system-packages --no-cache-dir \
+    "curl_cffi>=0.12,<0.13"
 
 ENV PYTHONUNBUFFERED=1
 

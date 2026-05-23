@@ -337,7 +337,7 @@ app.get("/api/health", (req, res) => {
 });
 
 // Helper: spawn yt-dlp and capture output, with retry on stale cookies or proxy fallback
-const YTDLP_BASE = ["--no-check-formats"];
+const YTDLP_BASE = ["--impersonate", "Chrome-136", "--no-check-formats"];
 const META_EXTRACTOR = "youtube:player_client=web_embedded;skip=webpage,js";
 const DL_EXTRACTOR = "youtube:player_client=web;skip=webpage,js";
 const DL_EXTRACTOR_NO_COOKIES = "youtube:player_client=android;skip=webpage,js";
