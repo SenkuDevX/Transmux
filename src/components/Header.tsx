@@ -1,4 +1,4 @@
-import { Layers, Activity, ServerCrash, Sun, Moon, Info, Wrench, Cookie, X, AlertTriangle } from "lucide-react";
+import { Layers, Activity, ServerCrash, Sun, Moon, Info, HelpCircle, Wrench, Cookie, X, AlertTriangle } from "lucide-react";
 import { useState, useRef } from "react";
 import { apiFetch } from "../api";
 
@@ -11,9 +11,10 @@ interface HeaderProps {
   theme: "light" | "dark";
   onToggleTheme: () => void;
   onOpenInfo?: () => void;
+  onOpenFAQ?: () => void;
 }
 
-export default function Header({ isServerOnline, serverInfo, theme, onToggleTheme, onOpenInfo }: HeaderProps) {
+export default function Header({ isServerOnline, serverInfo, theme, onToggleTheme, onOpenInfo, onOpenFAQ }: HeaderProps) {
   const logoClickCount = useRef(0);
   const [logoClicks, setLogoClicks] = useState(0);
   const [cookieModalOpen, setCookieModalOpen] = useState(false);
@@ -116,6 +117,17 @@ export default function Header({ isServerOnline, serverInfo, theme, onToggleThem
               title="About Transmux"
             >
               <Info className="h-4 w-4" />
+            </button>
+          )}
+          {/* FAQ Button */}
+          {onOpenFAQ && (
+            <button
+              onClick={onOpenFAQ}
+              id="btn-faq-modal"
+              className="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 border border-slate-200 dark:border-slate-705 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
+              title="FAQ"
+            >
+              <HelpCircle className="h-4 w-4" />
             </button>
           )}
           {/* Tone Theme Switch Pill */}

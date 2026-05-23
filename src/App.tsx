@@ -67,6 +67,7 @@ export default function App() {
 
   // Info modal state
   const [showInfoModal, setShowInfoModal] = useState(false);
+  const [showFAQModal, setShowFAQModal] = useState(false);
 
   // Elegant Toast notification states
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
@@ -416,7 +417,7 @@ export default function App() {
       <div id="bg-grid" className={theme === "dark" ? "dark" : "light"} style={{ transform: `translate(${gridOffsetX}px, ${gridOffsetY}px)` }} />
 
       {/* Corporate Header */}
-      <Header isServerOnline={isServerOnline} serverInfo={serverInfo} theme={theme} onToggleTheme={toggleTheme} onOpenInfo={() => setShowInfoModal(true)} />
+      <Header isServerOnline={isServerOnline} serverInfo={serverInfo} theme={theme} onToggleTheme={toggleTheme} onOpenInfo={() => setShowInfoModal(true)} onOpenFAQ={() => setShowFAQModal(true)} />
 
       {/* Main Container Layout */}
       <main id="main-content" className="relative flex-1 py-10 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto w-full space-y-8">
@@ -771,7 +772,7 @@ export default function App() {
                 {/* Description */}
                 <div className="bg-indigo-50/50 dark:bg-indigo-950/10 border border-indigo-100 dark:border-indigo-900/40 rounded-xl p-4">
                   <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
-                    Transmux is an enterprise-grade, open-source media conversion platform. It provides extreme scaling for container metadata inspection, dynamic bitrate selection, and cross-codec transcoding — all through a clean, modern interface.
+                    Transmux is a free, open-source media converter that runs entirely in your browser. It downloads from YouTube, SoundCloud, and other sites, then transcodes into any format using FFmpeg. No files are stored permanently — everything is cleaned up after 1 hour.
                   </p>
                 </div>
               </div>
@@ -780,6 +781,102 @@ export default function App() {
               <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/60 text-center">
                 <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
                   Crafted with <span className="text-rose-500">&hearts;</span> by SENKUDEVX &mdash; Project Saga
+                </p>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* FAQ Modal — Q&A array editable below */}
+      <AnimatePresence>
+        {showFAQModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-md"
+            onClick={() => setShowFAQModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              transition={{ type: "spring", duration: 0.4, bounce: 0.3 }}
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-xl overflow-hidden shadow-2xl text-slate-900 dark:text-slate-100"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-950">
+                    <HelpCircle className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold font-sans">FAQ</h3>
+                    <p className="text-[10px] font-mono text-slate-400 dark:text-slate-500 uppercase tracking-widest">Frequently Asked Questions</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowFAQModal(false)}
+                  className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4 max-h-[65vh] overflow-y-auto">
+                {/* FAQ items — edit this array to add/remove Q&A */}
+                {[
+                  {
+                    q: "How do I download from YouTube?",
+                    a: 'Paste a YouTube URL into the input field at the top. The server will fetch available formats. Select your quality, format, and click "Start Transcoding".',
+                  },
+                  {
+                    q: "The player says \u201CSign in to confirm\u201D \u2014 what do I do?",
+                    a: 'YouTube requires browser cookies for some videos. Click the cookie icon (🍪) in the header to upload a cookies.txt file. Export one from the "Get cookies.txt" Chrome extension.',
+                  },
+                  {
+                    q: "What formats are supported?",
+                    a: "Output: MP3, WAV, FLAC, Opus, OGG, M4A, AAC (audio); MP4, WebM, MKV, AVI, MOV (video). Input: anything FFmpeg + yt-dlp can read.",
+                  },
+                  {
+                    q: "How long are files kept?",
+                    a: "All job files are automatically deleted after 1 hour. Published files stay until manually removed.",
+                  },
+                  {
+                    q: "Can I embed cover art?",
+                    a: "Yes! Album art is automatically downloaded from YouTube and embedded into MP3, M4A, FLAC, and Opus/OGG (via Matroska) files. WebM is not supported for cover art.",
+                  },
+                  {
+                    q: "Where can I report bugs or request features?",
+                    a: 'Open an issue on <a href="https://github.com/SenkuDevX/Transmux/issues" target="_blank" rel="noopener noreferrer" class="underline text-indigo-600 dark:text-indigo-400 hover:text-indigo-800">GitHub Issues</a>.',
+                  },
+                  {
+                    q: "Is my data private?",
+                    a: "Yes. Files are processed on the server and deleted within 1 hour. No data is logged, tracked, or shared. Published files are public to anyone with the link.",
+                  },
+                  {
+                    q: "How to add my own Q&A here?",
+                    a: 'Edit the <code class="text-xs bg-slate-100 dark:bg-slate-800 px-1 rounded">faqItems</code> array in <code class="text-xs bg-slate-100 dark:bg-slate-800 px-1 rounded">src/App.tsx</code>. Each entry is <code class="text-xs bg-slate-100 dark:bg-slate-800 px-1 rounded">{"q": "Question", "a": "Answer with &lt;a&gt; links"}</code>. If you need a link, use <code class="text-xs bg-slate-100 dark:bg-slate-800 px-1 rounded">&lt;a href="..."&gt;text&lt;/a&gt;</code>.',
+                  },
+                ].map((item, i) => (
+                  <div key={i} className="bg-slate-50 dark:bg-slate-950 rounded-xl p-4 border border-slate-200 dark:border-slate-800 space-y-2">
+                    <p className="text-xs font-bold text-slate-900 dark:text-white flex items-start gap-2">
+                      <span className="text-indigo-500 dark:text-indigo-400 mt-0.5 shrink-0">Q:</span>
+                      <span>{item.q}</span>
+                    </p>
+                    <p
+                      className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed pl-5"
+                      dangerouslySetInnerHTML={{ __html: item.a }}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/60 text-center">
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
+                  More questions? <a href="https://github.com/SenkuDevX/Transmux/issues" target="_blank" rel="noopener noreferrer" className="underline text-indigo-600 dark:text-indigo-400">Open a GitHub issue</a>
                 </p>
               </div>
             </motion.div>

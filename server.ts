@@ -1013,6 +1013,7 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
 
         const baseDownloadArgs = [
           "-f", formatSelection,
+          "--concurrent-fragments", "5",
           "-o", path.join(jobDir, "input.%(ext)s"),
           "--write-thumbnail",
           "--convert-thumbnails", "jpg",
@@ -1679,17 +1680,35 @@ app.get("/api/download/:id", async (req, res) => {
   }
 
   // Fall back to local file
-  if (!job.outputPath || !fs.existsSync(job.outputPath)) {
+  const filePath = resolveJobOutputPath(job);
+  if (!filePath) {
     return res.status(404).send("<h2>Conversion download expired or deleted. Files are automatically kept for 1 hour.</h2>");
   }
 
   const customName = req.query.filename as string;
   const deliveryName = customName ? path.basename(customName) : (job.outputName || `transmux_${job.id}`);
 
-  res.download(job.outputPath, deliveryName, (err) => {
+  res.download(filePath, deliveryName, (err) => {
     if (err) console.error(`Failed to push file downstream to request: ${err}`);
   });
 });
+
+// Resolve the actual output file path for a job, scanning the directory if needed
+function resolveJobOutputPath(job: JobState): string | null {
+  if (job.outputPath && fs.existsSync(job.outputPath)) {
+    return job.outputPath;
+  }
+  const jobDir = path.join(tmpJobsDir, job.id);
+  if (fs.existsSync(jobDir)) {
+    const files = fs.readdirSync(jobDir);
+    const outFile = files.find(f => f.startsWith("output.") && fs.statSync(path.join(jobDir, f)).size > 0);
+    if (outFile) {
+      job.outputPath = path.join(jobDir, outFile);
+      return job.outputPath;
+    }
+  }
+  return null;
+}
 
 // Permanent storage structures for published media entries
 const tmpPublishedDir = path.join(DATA_ROOT, "published");
@@ -1762,8 +1781,14 @@ app.post("/api/publish", async (req, res) => {
   }
 
   const job = jobs.get(jobId);
-  if (!job || !job.outputPath || !fs.existsSync(job.outputPath) || job.status !== "completed") {
+  if (!job || job.status !== "completed") {
     return res.status(404).json({ success: false, error: "Job output file is either expired, offline, or incomplete." });
+  }
+
+  // Resolve actual output file (scans job directory if outputPath is stale)
+  const sourcePath = resolveJobOutputPath(job);
+  if (!sourcePath) {
+    return res.status(404).json({ success: false, error: "Output file not found in job directory." });
   }
 
   try {
@@ -1778,7 +1803,7 @@ app.post("/api/publish", async (req, res) => {
       downloadUrl = await getSignedDownloadUrl(s3Key, 86400); // 24h for published
     } else {
       // Create a physical copy (local fallback)
-      fs.copyFileSync(job.outputPath, permanentPath);
+      fs.copyFileSync(sourcePath, permanentPath);
       downloadUrl = `/api/download/${jobId}`;
     }
 
@@ -1845,10 +1870,11 @@ app.get("/api/job/stream/:id", async (req, res) => {
     } catch {}
   }
 
-  if (!job.outputPath || !fs.existsSync(job.outputPath)) {
+  const filePath = resolveJobOutputPath(job);
+  if (!filePath) {
     return res.status(404).send("File has expired or is offline.");
   }
-  serveFileWithRanges(req, res, job.outputPath);
+  serveFileWithRanges(req, res, filePath);
 });
 
 // 6d. Dynamic HTTP Range file stream for Published Gallery Files
