@@ -1,5 +1,6 @@
 import React, { useState, useRef } from "react";
 import { UploadCloud, FileVideo, FileAudio, CheckCircle2, AlertTriangle, Disc } from "lucide-react";
+import { apiUrl } from "../api";
 
 interface FileDropzoneProps {
   onUploadSuccess: (jobId: string, metadata: any) => void;
@@ -80,7 +81,7 @@ export default function FileDropzone({ onUploadSuccess, onUploadReset, activeUpl
     formData.append("file", file);
 
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/api/upload", true);
+    xhr.open("POST", apiUrl("/api/upload"), true);
 
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) {
