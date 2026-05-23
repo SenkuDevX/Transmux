@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, type RefObject } from "react";
 import { Play, Clock, Info, Check, HardDrive, Cpu, Music } from "lucide-react";
 import { MediaMetadata, MediaFormat } from "../types";
 
@@ -8,7 +8,7 @@ interface MetadataPreviewProps {
   onFormatSelected: (formatId: string) => void;
 }
 
-function useTilt(ref: React.RefObject<HTMLElement | null>) {
+function useTilt(ref: RefObject<HTMLElement | null>) {
   const handleMouseMove = useCallback((e: MouseEvent) => {
     const cards = ref.current?.querySelectorAll("[data-tilt]");
     if (!cards) return;
