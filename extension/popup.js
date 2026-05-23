@@ -37,8 +37,9 @@ async function updateUI() {
   const count = await countCookies();
   document.getElementById("cookie-count").textContent = `${count} cookies found`;
 
-  const lastSent = localStorage.getItem("lastSent");
-  document.getElementById("last-sent").textContent = lastSent || "Never";
+  chrome.storage.local.get("lastSentStr", (result) => {
+    document.getElementById("last-sent").textContent = result.lastSentStr || "Never";
+  });
 }
 
 document.getElementById("test-btn").addEventListener("click", async () => {

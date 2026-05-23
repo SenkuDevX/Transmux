@@ -64,14 +64,14 @@ export default function CookieRefreshModal({ jobId, backendUrl, onDismiss, onCan
     };
     window.addEventListener("message", handler);
 
-    // Fallback to manual after 10 seconds if no extension response
+    // Fallback to manual after 20 seconds if no extension response (MV3 cold start can be slow)
     const fallbackTimeout = setTimeout(() => {
       window.removeEventListener("message", handler);
       if (mode === "prompt") {
         setMode("manual");
         setError("Extension did not respond. Paste cookies manually below.");
       }
-    }, 10000);
+    }, 20000);
   };
 
   return (
