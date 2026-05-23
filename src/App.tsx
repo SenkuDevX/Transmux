@@ -20,6 +20,9 @@ import { MediaMetadata, ConversionSettings, Job, ConversionHistoryItem } from ".
 
 const BACKEND_URL = import.meta.env.VITE_API_URL || window.location.origin;
 
+// ✏️ EDIT ANNOUNCEMENT BANNER: change this text or set to "" to hide
+const BANNER_MESSAGE = "";
+
 export default function App() {
   // Theme Management
   const [theme, setTheme] = useState<"light" | "dark" | any>(() => {
@@ -71,6 +74,10 @@ export default function App() {
 
   // Elegant Toast notification states
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
+  const [showBanner, setShowBanner] = useState(() => {
+    if (!BANNER_MESSAGE) return false;
+    try { return localStorage.getItem("transmux_banner_dismissed") !== BANNER_MESSAGE; } catch { return true; }
+  });
 
   const showToast = (message: string, type: "success" | "error" | "info" = "info") => {
     setToast({ message, type });
@@ -419,6 +426,19 @@ export default function App() {
       {/* Corporate Header */}
       <Header isServerOnline={isServerOnline} serverInfo={serverInfo} theme={theme} onToggleTheme={toggleTheme} onOpenInfo={() => setShowInfoModal(true)} onOpenFAQ={() => setShowFAQModal(true)} />
 
+      {BANNER_MESSAGE && showBanner && (
+        <div className="bg-red-600 dark:bg-red-700 text-white text-center text-xs sm:text-sm font-medium px-4 py-2.5 flex items-center justify-center gap-3">
+          <span className="flex-1">{BANNER_MESSAGE}</span>
+          <button
+            onClick={() => { setShowBanner(false); try { localStorage.setItem("transmux_banner_dismissed", BANNER_MESSAGE); } catch {} }}
+            className="shrink-0 p-0.5 hover:bg-red-500 dark:hover:bg-red-600 rounded-full transition-colors cursor-pointer"
+            aria-label="Dismiss banner"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       {/* Main Container Layout */}
       <main id="main-content" className="relative flex-1 py-10 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto w-full space-y-8">
         
@@ -723,7 +743,7 @@ export default function App() {
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-slate-500 dark:text-slate-400">Version</span>
-                      <span className="text-xs font-mono text-slate-600 dark:text-slate-300">1.0.0</span>
+                      <span className="text-xs font-mono text-slate-600 dark:text-slate-300">3.0</span>
                     </div>
                   </div>
                 </div>

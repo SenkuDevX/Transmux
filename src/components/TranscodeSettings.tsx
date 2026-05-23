@@ -62,6 +62,7 @@ export default function TranscodeSettings({
   const [burnSubtitles, setBurnSubtitles] = useState(false);
   const [qualityPreset, setQualityPreset] = useState("keep");
   const [trimError, setTrimError] = useState<string | null>(null);
+  const [validationWarnings, setValidationWarnings] = useState<string[] | null>(null);
 
   // Helper: analyze media stream specs for validation warnings
   const getSourceSpecs = () => {
@@ -89,6 +90,7 @@ export default function TranscodeSettings({
       channels = sourceMetadata.audio?.channels || null;
       codec = sourceMetadata.video?.codec || null;
       audioCodec = sourceMetadata.audio?.codec || null;
+      fps = sourceMetadata.video?.fps || null;
     } else if (sourceType === "url" && sourceMetadata.formats) {
       const formats = sourceMetadata.formats as any[];
       const activeFmt = formats.find(f => f.formatId === selectedFormatId) || formats[0];
@@ -244,6 +246,13 @@ export default function TranscodeSettings({
     if (startSec !== null && endSec !== null && startSec >= endSec) {
       setTrimError("Start trim time must be strictly less than the end trim time.");
       return;
+    }
+
+    // Check quality validation warnings
+    const warnings = getValidationWarnings();
+    if (warnings.length > 0) {
+      setValidationWarnings(warnings);
+      return; // User must confirm via modal before proceeding
     }
 
     onStartConversion({
@@ -855,6 +864,65 @@ export default function TranscodeSettings({
           )}
         </button>
       </div>
+
+      {/* Quality Validation Warning Modal */}
+      {validationWarnings && (
+        <div
+          className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-md"
+          onClick={() => setValidationWarnings(null)}
+        >
+          <div
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0" />
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Quality Mismatch Warning</h3>
+            </div>
+            <div className="p-5 space-y-3 max-h-[50vh] overflow-y-auto">
+              {validationWarnings.map((w, i) => (
+                <div key={i} className="flex gap-2 text-xs text-slate-700 dark:text-slate-300 bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-900/40 rounded-lg p-3 leading-relaxed">
+                  <span className="text-amber-500 shrink-0 mt-0.5">•</span>
+                  <span>{w}</span>
+                </div>
+              ))}
+            </div>
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex gap-3 justify-end bg-slate-50/50 dark:bg-slate-900/60">
+              <button
+                onClick={() => setValidationWarnings(null)}
+                className="px-4 py-2 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                Modify Settings
+              </button>
+              <button
+                onClick={() => {
+                  setValidationWarnings(null);
+                  setTimeout(() => onStartConversion({
+                    outputFormat,
+                    audioBitrate,
+                    audioSampleRate,
+                    audioChannels,
+                    videoResolution,
+                    videoFps,
+                    videoCodec,
+                    audioCodec,
+                    videoBitrate,
+                    videoCrf,
+                    trimStart,
+                    trimEnd,
+                    burnSubtitles,
+                    stripAudio,
+                    selectedFormatId: "best"
+                  }), 50);
+                }}
+                className="px-4 py-2 text-xs font-semibold rounded-lg bg-amber-500 hover:bg-amber-600 text-white transition-colors cursor-pointer"
+              >
+                Convert Anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

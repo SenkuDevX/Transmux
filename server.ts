@@ -751,8 +751,8 @@ app.post("/api/convert/playlist", async (req, res) => {
       await runYtDlp([
         "-f", selFormat,
         "-o", path.join(itemDir, `input.%(ext)s`),
+        "--concurrent-fragments", "16",
         "--write-subs", "--write-auto-subs", "--sub-langs", "all,-live_chat",
-        "--embed-subs",
         "--convert-subs", "srt",
         "--no-playlist",
         "--extractor-args", DL_EXTRACTOR,
@@ -1020,13 +1020,10 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
 
         const baseDownloadArgs = [
           "-f", formatSelection,
-          "--concurrent-fragments", "5",
+          "--concurrent-fragments", "16",
           "-o", path.join(jobDir, "input.%(ext)s"),
           "--write-thumbnail",
           "--convert-thumbnails", "jpg",
-          "--write-subs", "--write-auto-subs", "--sub-langs", "all,-live_chat",
-          "--embed-subs",
-          "--convert-subs", "srt",
           "--no-playlist",
           url,
         ];
@@ -1131,6 +1128,22 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
         job.inputPath = path.join(jobDir, downloadedFile);
         job.inputSize = fs.statSync(job.inputPath).size;
         job.inputName = settings.mediaTitle || `url_source_${settings.outputFormat || 'converted'}${path.extname(downloadedFile)}`;
+
+        // Download subtitles separately for reliable embedding
+        try {
+          const subDlArgs = [
+            "--write-subs", "--write-auto-subs", "--sub-langs", "all,-live_chat",
+            "--convert-subs", "srt",
+            "--skip-download",
+            "-o", path.join(jobDir, "subs.%(ext)s"),
+            "--no-playlist",
+            url,
+          ];
+          const subResult = await runYtDlp(addCookiesArg([...subDlArgs], job.id));
+          if (subResult.code !== 0) console.warn(`[Job ${job.id}] Subtitle download returned code ${subResult.code}`);
+        } catch (e) {
+          console.warn(`[Job ${job.id}] Subtitle download failed:`, e);
+        }
 
         // Look for yt-dlp thumbnail written alongside the media file
         const thumbnailFile = files.find(f => /\.(jpg|jpeg|png|webp)$/i.test(f) && f !== "thumbnail.jpg");
