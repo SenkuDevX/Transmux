@@ -1183,6 +1183,9 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
         }
         job.progress = 44;
 
+        // Re-read directory to include newly downloaded subtitle files
+        const updatedFiles = fs.readdirSync(jobDir);
+
         // Look for yt-dlp thumbnail written alongside the media file
         const thumbnailFile = files.find(f => /\.(jpg|jpeg|png|webp)$/i.test(f) && f !== "thumbnail.jpg");
         if (thumbnailFile) {
@@ -1195,9 +1198,12 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
           }
         }
 
-        // Collect subtitle files downloaded alongside the media (store as relative filenames)
+        // Collect subtitle files (include both files from original download and separate subtitle download)
         const SUB_EXTENSIONS = [".vtt", ".srt", ".ass", ".ssa", ".sub"];
-        job.subtitleFiles = files.filter(f => SUB_EXTENSIONS.includes(path.extname(f).toLowerCase()));
+        job.subtitleFiles = updatedFiles.filter(f => SUB_EXTENSIONS.includes(path.extname(f).toLowerCase()));
+        // Also include any subs.* files from the separate subtitle download
+        const subFiles = updatedFiles.filter(f => f.startsWith("subs.") && SUB_EXTENSIONS.some(ext => f.toLowerCase().endsWith(ext)));
+        job.subtitleFiles = [...new Set([...job.subtitleFiles, ...subFiles])];
       }
     }
 
@@ -1491,6 +1497,25 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
         if (outputExt === "mp4") {
           args.push("-c:s", "mov_text");
         }
+      }
+    }
+
+    // Add external subtitle files (downloaded separately) as additional inputs and maps
+    if (!isAudioOutput && job.subtitleFiles && job.subtitleFiles.length > 0) {
+      let subInputIdx = (hasCover && outputExt !== "webm") ? 2 : 1;
+      for (const subFile of job.subtitleFiles) {
+        const subPath = path.join(jobDir, subFile);
+        if (fs.existsSync(subPath)) {
+          args.push("-i", subPath);
+          args.push("-map", `${subInputIdx}:0`);
+          subInputIdx++;
+        }
+      }
+      // Ensure subtitle codec is set for all subtitle streams
+      if (outputExt === "mp4") {
+        args.push("-c:s", "mov_text");
+      } else if (["mkv", "webm", "mov"].includes(outputExt)) {
+        args.push("-c:s", "copy");
       }
     }
 
@@ -2080,6 +2105,39 @@ function runFileCleanupService(): number {
       }
     }
   }
+
+  // Also clean up published files older than 1 hour
+  try {
+    const published = getPublishedGallery();
+    const before = published.length;
+    const remaining = published.filter(item => {
+      const age = now - new Date(item.publishedAt).getTime();
+      if (age > maxJobAge) {
+        // Delete the published file from disk
+        const filePath = path.join(tmpPublishedDir, `${item.id}_${item.outputName}`);
+        try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch {}
+        // Also clean up any other files with this id prefix
+        if (fs.existsSync(tmpPublishedDir)) {
+          const allFiles = fs.readdirSync(tmpPublishedDir);
+          for (const f of allFiles) {
+            if (f.startsWith(item.id + "_")) {
+              try { fs.unlinkSync(path.join(tmpPublishedDir, f)); } catch {}
+            }
+          }
+        }
+        clearedCount++;
+        return false;
+      }
+      return true;
+    });
+    if (remaining.length !== before) {
+      savePublishedGallery(remaining);
+      console.log(`[Transmux Sweeper] Purged ${before - remaining.length} expired published files from gallery.`);
+    }
+  } catch (err) {
+    console.error("[Transmux Sweeper] Error cleaning published gallery:", err);
+  }
+
   if (clearedCount > 0) {
     console.log(`[Transmux Sweeper] Purged ${clearedCount} expired job resources safely from disk.`);
   }

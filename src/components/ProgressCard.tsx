@@ -94,7 +94,7 @@ export default function ProgressCard({ job, onReset, onCancel, onPreview }: Prog
         </div>
 
         {job.status === "processing" && (
-          <span className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-955 px-2.5 py-1 rounded border border-slate-200 dark:border-slate-800">
+          <span className="text-xs font-mono font-bold text-slate-800 dark:text-white bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded border border-slate-200 dark:border-slate-700">
             {job.speed || "N/A"} Speed
           </span>
         )}

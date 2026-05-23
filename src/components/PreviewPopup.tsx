@@ -35,7 +35,9 @@ export default function PreviewPopup({ mediaId, filename, size, thumbnailUrl, is
     ? `/api/published/stream/${mediaId}`
     : `/api/job/stream/${mediaId}`);
 
-  const downloadUrl = apiUrl(`/api/download/${mediaId}?filename=${encodeURIComponent(filename)}`);
+  const downloadUrl = apiUrl(isPublished
+    ? `/api/published/stream/${mediaId}?filename=${encodeURIComponent(filename)}`
+    : `/api/download/${mediaId}?filename=${encodeURIComponent(filename)}`);
 
   const BAR_COUNT = 32;
   const [barHeights, setBarHeights] = useState<number[]>(Array(BAR_COUNT).fill(6));
@@ -203,7 +205,9 @@ export default function PreviewPopup({ mediaId, filename, size, thumbnailUrl, is
   };
 
   const handleCopyShareLink = async () => {
-    const absolute = apiUrl(`/api/download/${mediaId}?filename=${encodeURIComponent(filename)}`);
+    const absolute = apiUrl(isPublished
+      ? `/api/published/stream/${mediaId}?filename=${encodeURIComponent(filename)}`
+      : `/api/download/${mediaId}?filename=${encodeURIComponent(filename)}`);
     try {
       await navigator.clipboard.writeText(absolute);
       setCopiedLink(true);
