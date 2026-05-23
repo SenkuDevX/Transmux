@@ -1001,12 +1001,15 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
     // Phase 1: URL stream download if needed
     if (job.type === "url" && url) {
       // If download file already exists from a previous attempt, skip download
+      // EXCEPT when cookies were just refreshed — delete old stale download and re-fetch
       const existingFiles = fs.existsSync(jobDir) ? fs.readdirSync(jobDir) : [];
-      const existingDownload = existingFiles.find(f => f.startsWith("input.") && !/\.(jpg|jpeg|png|webp)$/i.test(f));
+      let existingDownload = existingFiles.find(f => f.startsWith("input.") && !/\.(jpg|jpeg|png|webp)$/i.test(f));
+      if (existingDownload && job.waitingCookies) {
+        console.log(`[Job ${job.id}] Cookies refreshed, deleting old download to re-download with fresh auth...`);
+        try { fs.unlinkSync(path.join(jobDir, existingDownload)); } catch {}
+        existingDownload = null;
+      }
       if (existingDownload) {
-        console.log(`[Job ${job.id}] Download already exists, skipping download phase.`);
-        job.inputPath = path.join(jobDir, existingDownload);
-        job.inputSize = fs.statSync(job.inputPath).size;
         job.inputName = settings.mediaTitle || `url_source_${settings.outputFormat || 'converted'}${path.extname(existingDownload)}`;
       } else {
         job.inputName = `Downloading from URL...`;

@@ -1,6 +1,27 @@
 import React, { useState, useEffect } from "react";
-import { Sliders, Video, Music, Scissors, VolumeX, RefreshCw, AlertTriangle } from "lucide-react";
+import { Sliders, Video, Music, Scissors, VolumeX, RefreshCw, AlertTriangle, HelpCircle } from "lucide-react";
 import { ConversionSettings } from "../types";
+
+function TooltipIcon({ text }: { text: string }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span className="relative inline-flex items-center">
+      <span
+        onMouseEnter={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+        className="ml-1 inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-help text-[9px] font-bold leading-none"
+      >
+        ?
+      </span>
+      {show && (
+        <span className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2.5 py-1.5 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-[10px] font-normal leading-relaxed rounded-lg shadow-lg whitespace-nowrap pointer-events-none max-w-[220px]">
+          {text}
+          <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900 dark:border-t-slate-100" />
+        </span>
+      )}
+    </span>
+  );
+}
 
 interface TranscodeSettingsProps {
   onStartConversion: (settings: ConversionSettings) => void;
@@ -171,14 +192,23 @@ export default function TranscodeSettings({
     return `${hStr}:${mStr}:${sStr}`;
   };
 
-  // Synchronize formats when tabs change
+  // Auto-match audio codec to output container format
+  const formatAudioCodecMap: Record<string, string> = {
+    mp3: "libmp3lame",
+    m4a: "aac",
+    aac: "aac",
+    wav: "pcm_s16le",
+    ogg: "libvorbis",
+    opus: "opus",
+    flac: "flac",
+    mp4: "aac",
+    mkv: "aac",
+  };
   useEffect(() => {
-    if (activeTab === "audio") {
-      setOutputFormat("mp3");
-    } else {
-      setOutputFormat("mp4");
+    if (activeTab === "audio" && formatAudioCodecMap[outputFormat]) {
+      setAudioCodec(formatAudioCodecMap[outputFormat]);
     }
-  }, [activeTab]);
+  }, [outputFormat, activeTab]);
 
   const triggerConversion = () => {
     setTrimError(null);
@@ -318,58 +348,55 @@ export default function TranscodeSettings({
           )}
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-          {[
-            { id: "keep", label: "Copy (Lossless)", desc: "Direct container shift", color: "border-slate-300 hover:border-slate-800 text-slate-800 bg-slate-50" },
-            { id: "high", label: "High (HD)", desc: "1080p, AAC 256k", color: "border-emerald-200 hover:border-emerald-400 text-emerald-800 bg-emerald-50" },
-            { id: "medium", label: "Medium (SD)", desc: "720p, AAC 192k", color: "border-blue-200 hover:border-blue-400 text-blue-800 bg-blue-50" },
-            { id: "low", label: "Downgrade (Low)", desc: "360p Mono, AAC 96k", color: "border-amber-200 hover:border-amber-400 text-amber-800 bg-amber-50" },
-          ].map((preset) => {
+          {(activeTab === "video"
+            ? [
+                { id: "keep", label: "Copy (Lossless)", desc: "Direct container shift", color: "border-slate-300 hover:border-slate-800 text-slate-800 bg-slate-50" },
+                { id: "high", label: "High (HD)", desc: "1080p H.264, AAC 256k", color: "border-emerald-200 hover:border-emerald-400 text-emerald-800 bg-emerald-50" },
+                { id: "medium", label: "Medium (SD)", desc: "720p H.264, AAC 192k", color: "border-blue-200 hover:border-blue-400 text-blue-800 bg-blue-50" },
+                { id: "low", label: "Downgrade (Low)", desc: "360p, AAC 96k mono", color: "border-amber-200 hover:border-amber-400 text-amber-800 bg-amber-50" },
+              ]
+            : [
+                { id: "keep", label: "Studio (Lossless)", desc: "FLAC 48kHz Stereo", color: "border-slate-300 hover:border-slate-800 text-slate-800 bg-slate-50" },
+                { id: "high", label: "High Fidelity", desc: "320k AAC, 48kHz Stereo", color: "border-emerald-200 hover:border-emerald-400 text-emerald-800 bg-emerald-50" },
+                { id: "medium", label: "Standard", desc: "192k AAC, 44.1kHz Stereo", color: "border-blue-200 hover:border-blue-400 text-blue-800 bg-blue-50" },
+                { id: "low", label: "Compressed", desc: "96k Opus, 32kHz Mono", color: "border-amber-200 hover:border-amber-400 text-amber-800 bg-amber-50" },
+              ]
+          ).map((preset) => {
             const isSelected = qualityPreset === preset.id;
             return (
-              <button
-                type="button"
-                key={preset.id}
-                onClick={() => {
-                  setQualityPreset(preset.id);
-                  if (preset.id === "keep") {
-                    setVideoCodec("keep");
-                    setVideoResolution("keep");
-                    setVideoFps("keep");
-                    setVideoCrf("keep");
-                    setAudioCodec("keep");
-                    setAudioBitrate("keep");
-                    setAudioSampleRate("keep");
-                    setAudioChannels("keep");
-                  } else if (preset.id === "high") {
-                    setVideoCodec("libx264");
-                    setVideoResolution("1920x1080");
-                    setVideoFps("30");
-                    setVideoCrf("18"); // high quality
-                    setAudioCodec("aac");
-                    setAudioBitrate("256k");
-                    setAudioSampleRate("48000");
-                    setAudioChannels("2");
-                  } else if (preset.id === "medium") {
-                    setVideoCodec("libx264");
-                    setVideoResolution("1280x720");
-                    setVideoFps("30");
-                    setVideoCrf("23"); // balanced
-                    setAudioCodec("aac");
-                    setAudioBitrate("192k");
-                    setAudioSampleRate("44100");
-                    setAudioChannels("2");
-                  } else if (preset.id === "low") {
-                    // Extreme Downgrade to lower quality & compressed size
-                    setVideoCodec("libx264");
-                    setVideoResolution("640x360"); // down resolution
-                    setVideoFps("24"); // down frame rate
-                    setVideoCrf("28"); // compression factor
-                    setAudioCodec("aac");
-                    setAudioBitrate("128k"); // standard downgrade
-                    setAudioSampleRate("32000"); // lower sampling rate
-                    setAudioChannels("1"); // Downmix trigger channel to mono
-                  }
-                }}
+                <button
+                  type="button"
+                  key={preset.id}
+                  onClick={() => {
+                    setQualityPreset(preset.id);
+                    if (preset.id === "keep") {
+                      if (activeTab === "video") {
+                        setVideoCodec("keep"); setVideoResolution("keep"); setVideoFps("keep"); setVideoCrf("keep");
+                      }
+                      setAudioCodec("keep"); setAudioBitrate("keep"); setAudioSampleRate("keep"); setAudioChannels("keep");
+                    } else if (preset.id === "high") {
+                      if (activeTab === "video") {
+                        setVideoCodec("libx264"); setVideoResolution("1920x1080"); setVideoFps("30"); setVideoCrf("18");
+                        setAudioCodec("aac"); setAudioBitrate("256k"); setAudioSampleRate("48000"); setAudioChannels("2");
+                      } else {
+                        setAudioCodec(formatAudioCodecMap[outputFormat] || "aac"); setAudioBitrate("320k"); setAudioSampleRate("48000"); setAudioChannels("2");
+                      }
+                    } else if (preset.id === "medium") {
+                      if (activeTab === "video") {
+                        setVideoCodec("libx264"); setVideoResolution("1280x720"); setVideoFps("30"); setVideoCrf("23");
+                        setAudioCodec("aac"); setAudioBitrate("192k"); setAudioSampleRate("44100"); setAudioChannels("2");
+                      } else {
+                        setAudioCodec("aac"); setAudioBitrate("192k"); setAudioSampleRate("44100"); setAudioChannels("2");
+                      }
+                    } else if (preset.id === "low") {
+                      if (activeTab === "video") {
+                        setVideoCodec("libx264"); setVideoResolution("640x360"); setVideoFps("24"); setVideoCrf("28");
+                        setAudioCodec("aac"); setAudioBitrate("128k"); setAudioSampleRate("32000"); setAudioChannels("1");
+                      } else {
+                        setAudioCodec("opus"); setAudioBitrate("96k"); setAudioSampleRate("32000"); setAudioChannels("1");
+                      }
+                    }
+                  }}
                 className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition-all cursor-pointer ${
                   isSelected
                     ? "border-2 border-slate-900 bg-slate-55 dark:bg-slate-800 dark:border-white shadow-sm ring-2 ring-slate-100/50"
@@ -425,7 +452,7 @@ export default function TranscodeSettings({
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-[10px] font-mono text-slate-400">Target Video Codec</label>
+                <label className="text-[10px] font-mono text-slate-400">Target Video Codec<TooltipIcon text="The encoder used for video. H.264 has widest compatibility, H.265/HEVC saves space, VP9 for WebM, AV1 for best compression on modern devices." /></label>
                 <select
                   id="select-video-codec"
                   value={videoCodec}
@@ -442,7 +469,7 @@ export default function TranscodeSettings({
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-mono text-slate-400">Resize Resolution</label>
+                <label className="text-[10px] font-mono text-slate-400">Resize Resolution<TooltipIcon text="Downscale or upscale the video. Keeping original resolution avoids quality loss. Scaling up (e.g. 720p → 1080p) does not add real detail." /></label>
                 <select
                   id="select-resolution"
                   value={videoResolution}
@@ -461,7 +488,7 @@ export default function TranscodeSettings({
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-mono text-slate-400">Frame Rate (FPS)</label>
+                <label className="text-[10px] font-mono text-slate-400">Frame Rate (FPS)<TooltipIcon text="Number of frames per second. 24 is cinematic, 30 is standard web video, 60 is smooth for gaming/sports. Higher FPS = larger file size." /></label>
                 <select
                   id="select-fps"
                   value={videoFps}
@@ -479,7 +506,7 @@ export default function TranscodeSettings({
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] font-mono text-slate-400">Constant Rate Factor (CRF)</label>
+                <label className="text-[10px] font-mono text-slate-400">Constant Rate Factor (CRF)<TooltipIcon text="Controls video quality vs file size. Lower = better quality but larger file. 18 is visually lossless, 23 is good balance, 28+ is smaller but lossy." /></label>
                 <select
                   id="select-crf"
                   value={videoCrf}
@@ -506,7 +533,7 @@ export default function TranscodeSettings({
           
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-[10px] font-mono text-slate-400">Audio Codec</label>
+              <label className="text-[10px] font-mono text-slate-400">Audio Codec<TooltipIcon text="The encoder used for audio. LAME for MP3, AAC for broad compatibility, Opus for best quality-per-bitrate, FLAC for lossless, PCM for uncompressed WAV." /></label>
               <select
                 id="select-audio-codec"
                 value={audioCodec}
@@ -526,7 +553,7 @@ export default function TranscodeSettings({
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[10px] font-mono text-slate-400">Audio Bitrate</label>
+              <label className="text-[10px] font-mono text-slate-400">Audio Bitrate<TooltipIcon text="Amount of data used per second of audio. Higher = better quality but larger file. 320k is near-transparent, 192k is good for most, 128k is acceptable for background listening." /></label>
               <select
                 id="select-audio-bitrate"
                 value={audioBitrate}
@@ -545,7 +572,7 @@ export default function TranscodeSettings({
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[10px] font-mono text-slate-400">Audio Sample Rate</label>
+              <label className="text-[10px] font-mono text-slate-400">Audio Sample Rate<TooltipIcon text="Number of audio samples per second. 44.1kHz is CD quality, 48kHz is video standard, 96kHz is high-res. Higher = more detail but larger files. Humans can't hear above 20kHz." /></label>
               <select
                 id="select-sample-rate"
                 value={audioSampleRate}
@@ -563,7 +590,7 @@ export default function TranscodeSettings({
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[10px] font-mono text-slate-400">Audio Channels</label>
+              <label className="text-[10px] font-mono text-slate-400">Audio Channels<TooltipIcon text="Number of audio channels. Mono (1) is a single speaker. Stereo (2) is left+right. 5.1 Surround (6) has front, rear, and subwoofer channels for surround sound systems." /></label>
               <select
                 id="select-channels"
                 value={audioChannels}
