@@ -369,7 +369,7 @@ function execYtDlp(args: string[]): Promise<{ stdout: string; stderr: string; co
 }
 
 function isBotError(stderr: string): boolean {
-  return stderr.includes("Sign in to confirm") || stderr.includes("not a bot");
+  return stderr.includes("Sign in to confirm") || stderr.includes("not a bot") || stderr.includes("OPENSSL_internal");
 }
 
 async function runYtDlp(baseArgs: string[], noCookieExtractor?: string): Promise<{ stdout: string; stderr: string; code: number }> {
@@ -1280,6 +1280,22 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
     let vCodec = settings.videoCodec;
     let aCodec = settings.audioCodec;
 
+    // Codec-container compatibility map: which audio codecs are valid for each container
+    const containerAudioCodecs: Record<string, string[]> = {
+      mp3: ["libmp3lame"],
+      ogg: ["libvorbis", "opus", "flac"],
+      opus: ["libopus"],
+      flac: ["flac"],
+      wav: ["pcm_s16le", "pcm_s24le", "pcm_f32le"],
+      m4a: ["aac", "alac"],
+      aac: ["aac"],
+      mp4: ["aac", "ac3", "mp3", "opus", "libmp3lame"],
+      mkv: ["aac", "ac3", "flac", "libmp3lame", "libvorbis", "opus", "alac", "dts"],
+      webm: ["libvorbis", "opus"],
+      mov: ["aac", "ac3", "alac", "mp3", "libmp3lame", "pcm_s16le"],
+      avi: ["libmp3lame", "aac", "ac3"],
+    };
+
     if (isAudioOutput) {
       if (!aCodec || aCodec === "keep") {
         if (outputExt === "mp3") aCodec = "libmp3lame";
@@ -1290,18 +1306,21 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
         else if (outputExt === "aac" || outputExt === "m4a") aCodec = "aac";
       }
     } else {
-      // Video outputs
+      // Video outputs — validate and fix incompatible codec-container combos
       if (!vCodec || vCodec === "keep") {
-        // VP9 or AV1 source inside WebM from YouTube requires H.264 when converting to MP4 container
         if (outputExt === "mp4" && meta.videoCodec && ["vp9", "vp8", "av1", "theora"].includes(meta.videoCodec.toLowerCase())) {
           vCodec = "libx264";
         }
       }
       if (!aCodec || aCodec === "keep") {
-        // Opus or Vorbis source audio requires AAC format when converting to standard MP4 container
         if (outputExt === "mp4" && meta.audioCodec && ["opus", "vorbis", "flac"].includes(meta.audioCodec.toLowerCase())) {
           aCodec = "aac";
         }
+      }
+      // If user explicitly chose an incompatible audio codec, fall back to a safe default
+      if (aCodec && aCodec !== "keep" && containerAudioCodecs[outputExt] && !containerAudioCodecs[outputExt].includes(aCodec)) {
+        console.log(`[CodecCompat] Audio codec "${aCodec}" not supported in .${outputExt}, falling back to "aac"`);
+        aCodec = "aac";
       }
     }
 
@@ -1401,14 +1420,26 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
       // Map Cover Artwork as attached picture stream inside Video Container
       // WebM does not support attached pictures — skip
       if (hasCover && outputExt !== "webm") {
-        args.push("-map", "0");
+        args.push("-map", "0:v");
+        args.push("-map", "0:a");
         args.push("-map", "1:0");
         args.push("-c:v:1", "mjpeg");
         args.push("-disposition:v:1", "attached_pic");
+        // Map subtitle streams separately with container-compatible codec
+        if (outputExt === "mp4") {
+          args.push("-map", "0:s?");
+          args.push("-c:s", "mov_text");
+        } else if (["mkv", "webm", "mov"].includes(outputExt)) {
+          args.push("-map", "0:s?");
+          args.push("-c:s", "copy");
+        }
+      } else {
+        // No cover art — map all input streams
+        args.push("-map", "0");
+        if (outputExt === "mp4") {
+          args.push("-c:s", "mov_text");
+        }
       }
-
-      // Embed subtitles from source (copy without re-encode)
-      args.push("-c:s", "copy");
     }
 
     // Output target

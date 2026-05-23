@@ -14,7 +14,7 @@ function TooltipIcon({ text }: { text: string }) {
         ?
       </span>
       {show && (
-        <span className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2.5 py-1.5 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-[10px] font-normal leading-relaxed rounded-lg shadow-lg whitespace-nowrap pointer-events-none max-w-[220px]">
+        <span className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2.5 py-1.5 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-[10px] font-normal leading-relaxed rounded-lg shadow-lg pointer-events-none max-w-[260px]">
           {text}
           <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900 dark:border-t-slate-100" />
         </span>
