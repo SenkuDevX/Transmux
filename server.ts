@@ -337,7 +337,7 @@ app.get("/api/health", (req, res) => {
 });
 
 // Helper: spawn yt-dlp and capture output, with retry on stale cookies or proxy fallback
-const YTDLP_BASE = ["--impersonate", "Chrome-136", "--no-check-formats", "--throttled-rate", "100K", "--concurrent-fragments", "4", "--buffer-size", "16K", "--no-part", "--extractor-args", "youtube:formats=dashy"];
+const YTDLP_BASE = ["--impersonate", "Chrome-136", "--no-check-formats", "--throttled-rate", "100K", "--buffer-size", "16K", "--no-part"];
 const META_EXTRACTOR = "youtube:player_client=web_embedded;skip=webpage,js";
 const DL_EXTRACTOR = "youtube:player_client=web;skip=webpage,js";
 const DL_EXTRACTOR_NO_COOKIES = "youtube:player_client=android;skip=webpage,js";
@@ -1047,6 +1047,14 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
         if (PROXY_URL) {
           downloadAttempts.push([...YTDLP_BASE, ...dlNoCookieArgs, ...baseDownloadArgs, "--proxy", PROXY_URL]);
         }
+        // Last resort: skip impersonation (curl_cffi can crash on some TLS/cookie interactions)
+        const noImpersionArgs = [...YTDLP_BASE, ...dlNoCookieArgs, ...baseDownloadArgs].filter(
+          (a, i, arr) => !(a === "--impersonate" || (i > 0 && arr[i - 1] === "--impersonate"))
+        );
+        downloadAttempts.push(noImpersionArgs);
+        if (PROXY_URL) {
+          downloadAttempts.push([...noImpersionArgs, "--proxy", PROXY_URL]);
+        }
 
         let lastError: Error | null = null;
         let allBotErrors = true;
@@ -1059,13 +1067,13 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
             lastError = err;
             const rawStderr = err.rawStderr || err.message;
             const isBot = isBotError(rawStderr);
-            if (!isBot) allBotErrors = false;
-            if (attemptArgs.includes("--cookies") && isBot) {
-              console.log("[yt-dlp] Cookies rejected by YouTube (stale/expired), skipping...");
-              // Mark global cookies as stale
+            // "double free" = curl_cffi heap corruption from stale cookies — treat as cookie issue
+            const isCookieCorruption = rawStderr.includes("double free") && attemptArgs.includes("--cookies");
+            if (!isBot && !isCookieCorruption) allBotErrors = false;
+            if (attemptArgs.includes("--cookies") && (isBot || isCookieCorruption)) {
+              console.log("[yt-dlp] Cookies stale/expired, marking stale...");
               const stalePath = COOKIES_FILE + ".stale";
               try { fs.renameSync(COOKIES_FILE, stalePath); } catch {}
-              // Also mark any job-specific cookies as stale
               const jobCookies = path.join(tmpJobsDir, job.id, "cookies.txt");
               if (fs.existsSync(jobCookies)) {
                 try { fs.renameSync(jobCookies, jobCookies + ".stale"); } catch {}
