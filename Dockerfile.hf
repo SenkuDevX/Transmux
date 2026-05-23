@@ -3,26 +3,17 @@ FROM node:22-bookworm
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
-    python3-dev \
-    libssl-dev \
-    pkg-config \
-    rustc \
-    cargo \
     ffmpeg \
     curl \
-    libcurl4-openssl-dev \
-    build-essential \
-    gcc \
-    g++ \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Build curl_cffi from source BEFORE yt-dlp (prevents pre-built wheel with bundled OpenSSL 1.1)
-RUN PIP_NO_BINARY=curl_cffi pip3 install --no-cache-dir \
-    "curl_cffi>=0.12,<0.13"
-
-# yt-dlp will detect the already-installed source-built curl_cffi and skip its bundled dep
 RUN pip3 install --no-cache-dir \
     "yt-dlp[default]"
+
+# Uninstall curl_cffi — its bundled OpenSSL 1.1 conflicts with system OpenSSL 3.x
+# yt-dlp will fall back to Python's native requests library
+RUN pip3 uninstall -y curl_cffi
 
 ENV PYTHONUNBUFFERED=1
 
