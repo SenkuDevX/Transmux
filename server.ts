@@ -1168,22 +1168,36 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
             subAttempts.push([...YTDLP_BASE, ...subDlNoCookieArgs, ...subDlBase, "--proxy", PROXY_URL]);
           }
           job.progress = 43;
+          let subLastError: string | null = null;
+          let allSubBotErrors = true;
           for (const subArgs of subAttempts) {
             try {
-              const subResult = await new Promise<{ code: number }>((resolve) => {
+              const subResult = await new Promise<{ code: number; stderr: string }>((resolve) => {
                 const subProc = spawn("yt-dlp", subArgs);
                 let subErr = "";
                 subProc.stderr.on("data", (d: Buffer) => { subErr += d.toString(); });
-                subProc.on("close", (code) => resolve({ code: code ?? 1 }));
+                subProc.on("close", (code) => resolve({ code: code ?? 1, stderr: subErr }));
               });
-              if (subResult.code === 0) break;
+              if (subResult.code === 0) { subLastError = null; break; }
+              subLastError = subResult.stderr;
+              if (!isBotError(subResult.stderr)) allSubBotErrors = false;
               console.warn(`[Job ${job.id}] Subtitle attempt failed (trying next method)...`);
             } catch (e) {
               console.warn(`[Job ${job.id}] Subtitle attempt crashed:`, e);
+              allSubBotErrors = false;
             }
           }
+
+          if (subLastError && allSubBotErrors && job.cookieRetryCount < 5) {
+            console.log(`[Job ${job.id}] All subtitle attempts blocked by auth. Requesting cookie refresh from user...`);
+            job.status = "waiting_cookies";
+            job.waitingCookies = true;
+            job.error = "Subtitle download needs fresh YouTube cookies. Please refresh.";
+            return;
+          }
+
           job.progress = 44;
-          // Re-read directory to include newly downloaded subtitle files (thumbnail handling moved to separate section)
+          // Re-read directory to include newly downloaded subtitle files
           const updatedFiles = fs.readdirSync(jobDir);
 
           // Collect subtitle files (include both files from original download and separate subtitle download)

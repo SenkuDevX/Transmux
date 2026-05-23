@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { RefreshCw, Chrome, Terminal, CheckCircle, AlertTriangle } from "lucide-react";
+import { RefreshCw, Terminal, CheckCircle, AlertTriangle } from "lucide-react";
 import { apiFetch } from "../api";
 
 interface Props {
@@ -11,10 +11,41 @@ interface Props {
 }
 
 export default function CookieRefreshModal({ jobId, backendUrl, onDismiss, onCancel }: Props) {
-  const [mode, setMode] = useState<"prompt" | "manual" | "sending" | "success">("prompt");
+  const [mode, setMode] = useState<"trying-extension" | "manual" | "sending" | "success">("trying-extension");
   const [cookiesText, setCookiesText] = useState("");
   const [error, setError] = useState("");
-  const [extensionTried, setExtensionTried] = useState(false);
+
+  // Auto-try extension on mount
+  useEffect(() => {
+    window.postMessage(
+      { type: "TRANSMUX_REFRESH_COOKIES", backendUrl, jobId },
+      "*"
+    );
+
+    const timer = setTimeout(() => {
+      setMode("manual");
+      setError("Extension did not respond. Paste cookies manually.");
+    }, 8000);
+
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type === "TRANSMUX_COOKIES_RESULT") {
+        clearTimeout(timer);
+        if (event.data.success) {
+          setMode("success");
+          setTimeout(onDismiss, 2000);
+        } else {
+          setMode("manual");
+          setError(event.data.error || "Extension failed to send cookies");
+        }
+      }
+    };
+    window.addEventListener("message", handler);
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("message", handler);
+    };
+  }, []);
 
   const sendCookies = async (cookies: string) => {
     setMode("sending");
@@ -38,42 +69,6 @@ export default function CookieRefreshModal({ jobId, backendUrl, onDismiss, onCan
     }
   };
 
-  const tryExtension = () => {
-    setExtensionTried(true);
-    setError("");
-
-    // Try extension via postMessage only (CustomEvent doesn't cross isolated world)
-    window.postMessage(
-      { type: "TRANSMUX_REFRESH_COOKIES", backendUrl, jobId },
-      "*"
-    );
-
-    // Listen for extension response
-    const handler = (event: MessageEvent) => {
-      if (event.data?.type === "TRANSMUX_COOKIES_RESULT") {
-        window.removeEventListener("message", handler);
-        if (event.data.success) {
-          clearTimeout(fallbackTimeout);
-          setMode("success");
-          setTimeout(onDismiss, 2000);
-        } else {
-          setError(event.data.error || "Extension failed to send cookies");
-          setMode("manual");
-        }
-      }
-    };
-    window.addEventListener("message", handler);
-
-    // Fallback to manual after 20 seconds if no extension response (MV3 cold start can be slow)
-    const fallbackTimeout = setTimeout(() => {
-      window.removeEventListener("message", handler);
-      if (mode === "prompt") {
-        setMode("manual");
-        setError("Extension did not respond. Paste cookies manually below.");
-      }
-    }, 20000);
-  };
-
   return (
     <AnimatePresence>
       <motion.div
@@ -87,7 +82,7 @@ export default function CookieRefreshModal({ jobId, backendUrl, onDismiss, onCan
           initial={{ scale: 0.95, y: 10 }}
           animate={{ scale: 1, y: 0 }}
         >
-          {mode === "prompt" && (
+          {mode === "trying-extension" && (
             <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-amber-100 dark:bg-amber-900/40 rounded-full">
@@ -96,36 +91,25 @@ export default function CookieRefreshModal({ jobId, backendUrl, onDismiss, onCan
                 <div>
                   <h3 className="font-bold text-sm text-slate-900 dark:text-white">YouTube Requires Authentication</h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    The server needs fresh YouTube cookies to continue.
+                    Auto-connecting to Transmux extension...
                   </p>
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <button
-                  onClick={tryExtension}
-                  disabled={extensionTried}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-50"
-                >
-                  <Chrome className="h-5 w-5 text-indigo-500" />
-                  <div className="text-left">
-                    <p className="text-sm font-semibold text-slate-900 dark:text-white">Auto-Relay via Extension</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Transmux Cookie Relay extension sends cookies in one click</p>
-                  </div>
-                  <RefreshCw className="h-4 w-4 text-slate-400 ml-auto" />
-                </button>
-
-                <button
-                  onClick={() => setMode("manual")}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                >
-                  <Terminal className="h-5 w-5 text-slate-500" />
-                  <div className="text-left">
-                    <p className="text-sm font-semibold text-slate-900 dark:text-white">Paste Cookies Manually</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Export via "Get cookies.txt" extension and paste below</p>
-                  </div>
-                </button>
+              <div className="flex items-center justify-center py-3">
+                <RefreshCw className="h-6 w-6 text-indigo-500 animate-spin" />
               </div>
+
+              <button
+                onClick={() => setMode("manual")}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <Terminal className="h-5 w-5 text-slate-500" />
+                <div className="text-left">
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white">Paste Cookies Manually</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Export via "Get cookies.txt" extension and paste below</p>
+                </div>
+              </button>
 
               <button
                 onClick={onCancel || onDismiss}
@@ -144,7 +128,7 @@ export default function CookieRefreshModal({ jobId, backendUrl, onDismiss, onCan
               </div>
 
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Use a browser extension like{" "}
+                Use the built-in Transmux extension or{" "}
                 <a href="https://chrome.google.com/webstore/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc" target="_blank" rel="noopener noreferrer" className="underline text-indigo-500">"Get cookies.txt LOCALLY"</a>{" "}
                 to export YouTube cookies in Netscape format, then paste below.
               </p>
@@ -163,10 +147,10 @@ export default function CookieRefreshModal({ jobId, backendUrl, onDismiss, onCan
 
               <div className="flex gap-2">
                 <button
-                  onClick={() => setMode("prompt")}
+                  onClick={onCancel || onDismiss}
                   className="flex-1 px-4 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
                 >
-                  Back
+                  Cancel
                 </button>
                 <button
                   onClick={() => sendCookies(cookiesText)}
