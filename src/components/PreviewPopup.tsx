@@ -52,13 +52,13 @@ export default function PreviewPopup({ mediaId, filename, size, thumbnailUrl, is
         const binsPerBar = Math.floor(dataArray.length / BAR_COUNT);
         const heights = Array.from({ length: BAR_COUNT }, (_, i) => {
           if (isPlaying) {
-            let peak = 0;
+            let sum = 0;
             for (let j = 0; j < binsPerBar; j++) {
-              peak = Math.max(peak, dataArray[i * binsPerBar + j]);
+              sum += dataArray[i * binsPerBar + j];
             }
-            // Aggressive gain curve: high frequencies get 4-6x boost so last 8 bars move too
-            const gain = 0.2 + Math.pow(i / BAR_COUNT, 0.5) * 4.8;
-            return Math.max(4, Math.min(96, (peak / 255) * 84 * gain + 4));
+            const avg = sum / binsPerBar;
+            const gain = 0.8 + (i / BAR_COUNT) * 0.8;
+            return Math.max(4, Math.min(72, (avg / 255) * 40 * gain + 4));
           }
           // Idle animation: gentle wave
           const idle = Math.sin(Date.now() / 300 + i * 0.5) * 3 + 8;
@@ -281,16 +281,33 @@ export default function PreviewPopup({ mediaId, filename, size, thumbnailUrl, is
                 className="hidden"
               />
 
-              {/* Album art — rotating disc when playing, static squircle when paused */}
+              {/* Album art — vinyl-style disc with center label, 3D shadow, smooth rotation */}
               {thumbnailUrl && (
-                <div className="flex justify-center mb-4">
-                  <div
-                    className="w-36 h-36 rounded-full overflow-hidden border-2 border-slate-200 dark:border-slate-700 shadow-lg"
-                    style={{
-                      animation: isPlaying ? "spin 8s linear infinite" : "none",
-                    }}
-                  >
-                    <img src={thumbnailUrl} alt="" className="w-full h-full object-cover" />
+                <div className="flex justify-center mb-6">
+                  <div className="relative w-40 h-40">
+                    <div
+                      className="w-full h-full rounded-full overflow-hidden shadow-2xl"
+                      style={{
+                        animation: isPlaying ? "spin 8s linear infinite" : "none",
+                        boxShadow: isPlaying
+                          ? "0 0 40px rgba(99,102,241,0.25), inset 0 0 30px rgba(0,0,0,0.15)"
+                          : "0 8px 32px rgba(0,0,0,0.2)",
+                        transition: "box-shadow 0.6s ease",
+                      }}
+                    >
+                      <img src={thumbnailUrl} alt="" className="w-full h-full object-cover" />
+                      {/* Radial vignette for 3D vinyl depth */}
+                      <div
+                        className="absolute inset-0 rounded-full pointer-events-none"
+                        style={{
+                          background: "radial-gradient(circle, transparent 35%, rgba(0,0,0,0.06) 55%, rgba(0,0,0,0.18) 100%)",
+                        }}
+                      />
+                    </div>
+                    {/* Center spindle / record label */}
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <div className="w-9 h-9 rounded-full bg-gradient-to-b from-slate-50 to-slate-300 dark:from-slate-600 dark:to-slate-800 border-[2.5px] border-slate-300 dark:border-slate-600 shadow-inner" />
+                    </div>
                   </div>
                 </div>
               )}
