@@ -52,14 +52,13 @@ export default function PreviewPopup({ mediaId, filename, size, thumbnailUrl, is
         const binsPerBar = Math.floor(dataArray.length / BAR_COUNT);
         const heights = Array.from({ length: BAR_COUNT }, (_, i) => {
           if (isPlaying) {
-            let sum = 0;
+            let peak = 0;
             for (let j = 0; j < binsPerBar; j++) {
-              sum += dataArray[i * binsPerBar + j];
+              peak = Math.max(peak, dataArray[i * binsPerBar + j]);
             }
-            const avg = sum / binsPerBar;
-            // Gain curve: higher bars (high frequencies) get boosted so last bars also move
-            const gain = 0.3 + (i / BAR_COUNT) * 1.7;
-            return Math.max(4, Math.min(96, (avg / 255) * 84 * gain + 4));
+            // Aggressive gain curve: high frequencies get 4-6x boost so last 8 bars move too
+            const gain = 0.2 + Math.pow(i / BAR_COUNT, 0.5) * 4.8;
+            return Math.max(4, Math.min(96, (peak / 255) * 84 * gain + 4));
           }
           // Idle animation: gentle wave
           const idle = Math.sin(Date.now() / 300 + i * 0.5) * 3 + 8;

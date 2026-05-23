@@ -555,7 +555,7 @@ export default function App() {
                   job={activeJob}
                   onReset={handleReset}
                   onCancel={() => handleCancelJob(activeJob.id)}
-                  onPreview={(id, name, size) => setPreviewMedia({ id, name, size, isPublished: false })}
+                  onPreview={(id, name, size) => setPreviewMedia({ id, name, size, thumbnailUrl: metadata?.thumbnail, isPublished: false })}
                 />
                 {showStallWarning && (
                   <div className="bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-center space-y-2">

@@ -1325,7 +1325,7 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
       : job.inputName
         ? path.basename(job.inputName, path.extname(job.inputName)).replace(/_/g, " ").replace(/^url_source_/, "")
         : "Converted Stream";
-    const mediaArtist = settings.mediaUploader || mediaTitle;
+    const mediaArtist = settings.mediaUploader && settings.mediaUploader.trim() !== "" ? settings.mediaUploader : mediaTitle;
     args.push("-metadata", `title=${mediaTitle}`);
     args.push("-metadata", `artist=${mediaArtist}`);
     args.push("-metadata", "comment=Converted via Transmux");
