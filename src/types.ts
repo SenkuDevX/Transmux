@@ -62,6 +62,7 @@ export interface Job {
   downloadUrl: string | null;
   subtitleFiles?: string[];
   waitingCookies?: boolean;
+  phase?: string;
 }
 
 export interface ConversionHistoryItem {

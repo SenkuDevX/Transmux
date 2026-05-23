@@ -110,9 +110,16 @@ export default function ProgressCard({ job, onReset, onCancel, onPreview }: Prog
               <p className="font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[280px]">
                 {job.inputName}
               </p>
-              <span className="text-xs font-mono font-bold text-slate-550 dark:text-slate-400">
-                {job.progress}%
-              </span>
+              <div className="flex items-center gap-2">
+                {job.phase && (
+                  <span className="text-[10px] font-mono font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/30 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-800 uppercase tracking-wider">
+                    {job.phase === "downloading" ? "Downloading" : job.phase === "transcoding" ? "Encoding" : job.phase === "muxing" ? "Muxing" : job.phase === "done" ? "Done" : job.phase}
+                  </span>
+                )}
+                <span className="text-xs font-mono font-bold text-slate-550 dark:text-slate-400">
+                  {job.progress}%
+                </span>
+              </div>
             </div>
 
             {/* Glowing progress bar */}

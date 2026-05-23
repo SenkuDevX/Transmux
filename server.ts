@@ -125,6 +125,7 @@ interface JobState {
   outputPath: string | null;
   s3Key: string | null; // S3 object key (if USE_S3)
   subtitleFiles: string[]; // .vtt/.srt files from yt-dlp
+  phase: string; // 'downloading' | 'transcoding' | 'muxing' | 'done'
 
   // Cookie refresh flow
   waitingCookies: boolean;
@@ -511,6 +512,7 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
         outputPath: null,
         s3Key: null,
         subtitleFiles: [],
+        phase: "",
         waitingCookies: false,
         cookieRetryCount: 0,
       };
@@ -867,6 +869,7 @@ app.post("/api/convert", async (req, res) => {
       outputPath: null,
       s3Key: null,
       subtitleFiles: [],
+      phase: "",
       waitingCookies: false,
       cookieRetryCount: 0,
     };
@@ -991,6 +994,7 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
 
   try {
     job.status = "processing";
+    job.phase = "downloading";
     job.waitingCookies = false;
     job.progress = 5;
 
@@ -1262,6 +1266,7 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
     }
 
     // Phase 2: FFmpeg conversion
+    job.phase = "transcoding";
     const outputExt = (settings.outputFormat || "mp3").toLowerCase();
     const finalFilename = `output.${outputExt}`;
     const outputPath = path.join(jobDir, finalFilename);
@@ -1506,6 +1511,7 @@ app.get("/api/job/subtitle/:id/:filename", (req, res) => {
 
     // Post-process: merge cover art into the completed audio file
     if (thumbnailDownloaded && isAudioOutput && outputExt !== "wav") {
+      job.phase = "muxing";
       const mergedPath = path.join(jobDir, `merged.${outputExt}`);
       let mergeSucceeded = false;
 
@@ -1614,6 +1620,7 @@ app.get("/api/job/subtitle/:id/:filename", (req, res) => {
 
     // Set job as successfully transcoded!
     job.status = "completed";
+    job.phase = "done";
     job.progress = 100;
     job.speed = "completed";
     job.eta = "done";
