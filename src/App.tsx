@@ -394,9 +394,25 @@ export default function App() {
     setHistory([]);
   };
 
+  const [mousePos, setMousePos] = useState({ x: 0.5, y: 0.5 });
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      setMousePos({ x: e.clientX / window.innerWidth, y: e.clientY / window.innerHeight });
+    };
+    window.addEventListener("mousemove", handler);
+    return () => window.removeEventListener("mousemove", handler);
+  }, []);
+
+  const gridOffsetX = (mousePos.x - 0.5) * 12;
+  const gridOffsetY = (mousePos.y - 0.5) * 12;
+
   return (
     <div id="applet-viewport" className="min-h-screen flex flex-col font-sans relative text-slate-900 dark:text-slate-100 transition-colors duration-300">
       
+      {/* Interactive background grid overlay — moves with cursor */}
+      <div id="bg-grid" className={theme === "dark" ? "dark" : "light"} style={{ transform: `translate(${gridOffsetX}px, ${gridOffsetY}px)` }} />
+
       {/* Corporate Header */}
       <Header isServerOnline={isServerOnline} serverInfo={serverInfo} theme={theme} onToggleTheme={toggleTheme} onOpenInfo={() => setShowInfoModal(true)} />
 

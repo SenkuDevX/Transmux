@@ -104,21 +104,24 @@ export default function PreviewPopup({ mediaId, filename, size, isPublished = fa
       if (isPlaying) {
         audioRef.current.pause();
       } else {
-        if (!audioCtxRef.current) {
-          const ctx = new AudioContext();
-          const analyser = ctx.createAnalyser();
-          analyser.fftSize = 512;
-          const source = ctx.createMediaElementSource(audioRef.current);
-          source.connect(analyser);
-          analyser.connect(ctx.destination);
-          audioCtxRef.current = ctx;
-          analyserRef.current = analyser;
+        try {
+          if (!audioCtxRef.current) {
+            const ctx = new AudioContext();
+            const analyser = ctx.createAnalyser();
+            analyser.fftSize = 512;
+            const source = ctx.createMediaElementSource(audioRef.current);
+            source.connect(analyser);
+            analyser.connect(ctx.destination);
+            audioCtxRef.current = ctx;
+            analyserRef.current = analyser;
+          }
+          if (audioCtxRef.current.state === "suspended") {
+            audioCtxRef.current.resume();
+          }
+          audioRef.current.play().catch(() => {});
+        } catch (e) {
+          console.warn("Audio preview setup failed:", e);
         }
-        // Resume context (browsers suspend AudioContext until user gesture resumes it)
-        if (audioCtxRef.current.state === "suspended") {
-          audioCtxRef.current.resume();
-        }
-        audioRef.current.play().catch(() => {});
       }
       setIsPlaying(!isPlaying);
     }
@@ -268,6 +271,8 @@ export default function PreviewPopup({ mediaId, filename, size, isPublished = fa
               <audio
                 ref={audioRef}
                 src={streamUrl}
+                crossOrigin="anonymous"
+                preload="auto"
                 onTimeUpdate={handleTimeUpdate}
                 onLoadedMetadata={handleLoadedMetadata}
                 onEnded={() => setIsPlaying(false)}
