@@ -1388,7 +1388,8 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
       }
 
       // Map Cover Artwork as attached picture stream inside Video Container
-      if (hasCover) {
+      // WebM does not support attached pictures — skip
+      if (hasCover && outputExt !== "webm") {
         args.push("-map", "0");
         args.push("-map", "1:0");
         args.push("-c:v:1", "mjpeg");

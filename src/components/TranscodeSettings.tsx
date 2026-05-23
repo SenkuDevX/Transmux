@@ -388,6 +388,31 @@ export default function TranscodeSettings({
         </div>
       </div>
 
+      {/* Compression Quality Slider — prominent control for file size vs quality */}
+      <div id="compression-slider-container" className="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-4">
+        <div className="flex items-center justify-between">
+          <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            Video Compression (File Size vs Quality)
+          </label>
+          <span className="text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400">
+            {videoCrf === "keep" ? "Default (23)" : `CRF ${videoCrf}`}
+          </span>
+        </div>
+        <input
+          type="range"
+          min="12"
+          max="40"
+          step="1"
+          value={videoCrf === "keep" ? "23" : videoCrf}
+          onChange={(e) => setVideoCrf(e.target.value)}
+          className="w-full accent-indigo-600 dark:accent-indigo-400 h-2 bg-slate-200 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer"
+        />
+        <div className="flex justify-between text-[9px] font-mono text-slate-400 dark:text-slate-600">
+          <span>Best Quality</span>
+          <span>Smallest File</span>
+        </div>
+      </div>
+
       {/* Conditional Advanced Options Panel */}
       <div id="settings-group-container" className="space-y-5">
         

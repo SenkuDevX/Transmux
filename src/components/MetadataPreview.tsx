@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Play, Clock, Info, Check, HardDrive, Cpu, Music } from "lucide-react";
 import { MediaMetadata, MediaFormat } from "../types";
 
@@ -6,6 +6,44 @@ interface MetadataPreviewProps {
   metadata: MediaMetadata;
   selectedFormatId: string;
   onFormatSelected: (formatId: string) => void;
+}
+
+function useTilt(ref: React.RefObject<HTMLElement | null>) {
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    const cards = ref.current?.querySelectorAll("[data-tilt]");
+    if (!cards) return;
+    cards.forEach((card) => {
+      const el = card as HTMLElement;
+      const rect = el.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const dx = (e.clientX - cx) / (rect.width / 2);
+      const dy = (e.clientY - cy) / (rect.height / 2);
+      el.style.setProperty("--rx", `${-dy * 6}deg`);
+      el.style.setProperty("--ry", `${dx * 6}deg`);
+    });
+  }, [ref]);
+
+  const handleMouseLeave = useCallback(() => {
+    const cards = ref.current?.querySelectorAll("[data-tilt]");
+    if (!cards) return;
+    cards.forEach((card) => {
+      const el = card as HTMLElement;
+      el.style.setProperty("--rx", "0deg");
+      el.style.setProperty("--ry", "0deg");
+    });
+  }, [ref]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.addEventListener("mousemove", handleMouseMove);
+    el.addEventListener("mouseleave", handleMouseLeave);
+    return () => {
+      el.removeEventListener("mousemove", handleMouseMove);
+      el.removeEventListener("mouseleave", handleMouseLeave);
+    };
+  }, [ref, handleMouseMove, handleMouseLeave]);
 }
 
 export function formatDuration(seconds: number): string {
@@ -34,6 +72,8 @@ export function formatSize(bytes: number): string {
 
 export default function MetadataPreview({ metadata, selectedFormatId, onFormatSelected }: MetadataPreviewProps) {
   const [showAllFormats, setShowAllFormats] = useState(false);
+  const gridRef = useRef<HTMLDivElement>(null);
+  useTilt(gridRef);
 
   const isUrlType = !!metadata.formats;
   const listFormats = metadata.formats || [];
@@ -131,16 +171,18 @@ export default function MetadataPreview({ metadata, selectedFormatId, onFormatSe
             </div>
           )}
 
-          <div id="formats-grid" className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+          <div id="formats-grid" ref={gridRef} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5" style={{ perspective: "900px" }}>
             {/* Direct Best Match Preset */}
             <div
               id="format-best"
+              data-tilt
               onClick={() => onFormatSelected("best")}
               className={`p-3 rounded-xl border flex flex-col justify-between text-left cursor-pointer transition-all duration-200 ${
                 selectedFormatId === "best"
                   ? "border-2 border-slate-900 dark:border-slate-100 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-semibold"
                   : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400"
               }`}
+              style={{ transform: "perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg))" }}
             >
               <div className="flex items-start justify-between">
                 <div>
@@ -168,6 +210,7 @@ export default function MetadataPreview({ metadata, selectedFormatId, onFormatSe
               return (
                 <div
                   id={`format-item-${fmt.formatId}`}
+                  data-tilt
                   key={fmt.formatId}
                   onClick={() => onFormatSelected(fmt.formatId)}
                   className={`p-3 rounded-xl border flex flex-col justify-between text-left cursor-pointer transition-all duration-200 ${
@@ -175,6 +218,7 @@ export default function MetadataPreview({ metadata, selectedFormatId, onFormatSe
                       ? "border-2 border-slate-900 dark:border-slate-100 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-semibold"
                       : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400"
                   }`}
+                  style={{ transform: "perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg))" }}
                 >
                   <div className="flex items-start justify-between gap-1.5 min-w-0">
                     <div className="min-w-0">

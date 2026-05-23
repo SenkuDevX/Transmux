@@ -36,7 +36,8 @@ export default function PreviewPopup({ mediaId, filename, size, isPublished = fa
 
   const downloadUrl = apiUrl(`/api/download/${mediaId}?filename=${encodeURIComponent(filename)}`);
 
-  const [barHeights, setBarHeights] = useState<number[]>(Array(16).fill(12));
+  const BAR_COUNT = 32;
+  const [barHeights, setBarHeights] = useState<number[]>(Array(BAR_COUNT).fill(6));
   const animationRef = useRef<number | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -44,26 +45,24 @@ export default function PreviewPopup({ mediaId, filename, size, isPublished = fa
   useEffect(() => {
     let frameId: number;
     const update = () => {
-      if (isPlaying && analyserRef.current) {
+      if (analyserRef.current) {
         const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
         analyserRef.current.getByteFrequencyData(dataArray);
-        const binsPerBar = Math.floor(dataArray.length / 16);
-        const heights = Array.from({ length: 16 }, (_, i) => {
-          let sum = 0;
-          for (let j = 0; j < binsPerBar; j++) {
-            sum += dataArray[i * binsPerBar + j];
+        const binsPerBar = Math.floor(dataArray.length / BAR_COUNT);
+        const heights = Array.from({ length: BAR_COUNT }, (_, i) => {
+          if (isPlaying) {
+            let sum = 0;
+            for (let j = 0; j < binsPerBar; j++) {
+              sum += dataArray[i * binsPerBar + j];
+            }
+            const avg = sum / binsPerBar;
+            return Math.max(4, (avg / 255) * 84 + 4);
           }
-          const avg = sum / binsPerBar;
-          return Math.max(8, (avg / 255) * 78 + 4);
+          // Idle animation: gentle wave
+          const idle = Math.sin(Date.now() / 300 + i * 0.5) * 3 + 8;
+          return Math.max(4, idle);
         });
         setBarHeights(heights);
-      } else {
-        setBarHeights((prev) => {
-          if (prev.every((h) => Math.abs(h - 12) < 0.5)) {
-            return Array(16).fill(12);
-          }
-          return prev.map((h) => h + (12 - h) * 0.22);
-        });
       }
       frameId = requestAnimationFrame(update);
     };
@@ -108,16 +107,18 @@ export default function PreviewPopup({ mediaId, filename, size, isPublished = fa
         if (!audioCtxRef.current) {
           const ctx = new AudioContext();
           const analyser = ctx.createAnalyser();
-          analyser.fftSize = 256;
+          analyser.fftSize = 512;
           const source = ctx.createMediaElementSource(audioRef.current);
           source.connect(analyser);
           analyser.connect(ctx.destination);
           audioCtxRef.current = ctx;
           analyserRef.current = analyser;
-        } else if (audioCtxRef.current.state === "suspended") {
+        }
+        // Resume context (browsers suspend AudioContext until user gesture resumes it)
+        if (audioCtxRef.current.state === "suspended") {
           audioCtxRef.current.resume();
         }
-        audioRef.current.play();
+        audioRef.current.play().catch(() => {});
       }
       setIsPlaying(!isPlaying);
     }
@@ -274,15 +275,16 @@ export default function PreviewPopup({ mediaId, filename, size, isPublished = fa
               />
 
               {/* Spectacular pulsating visual sound waves */}
-              <div className="flex items-center justify-center gap-1.5 h-24 mb-2">
+              <div className="flex items-center justify-center gap-[3px] h-28 mb-2">
                 {barHeights.map((h, i) => (
                   <div
                     key={i}
-                    className={`w-1.5 rounded-full bg-gradient-to-t from-indigo-500 via-purple-500 to-indigo-600 dark:from-indigo-400 dark:via-pink-400 dark:to-sky-400 origin-center shadow-sm ${
-                      isPlaying ? "" : "transition-all duration-300 ease-out"
+                    className={`w-1 rounded-full bg-gradient-to-t from-indigo-500 via-purple-500 to-pink-500 dark:from-indigo-400 dark:via-pink-400 dark:to-rose-300 origin-center shadow-sm ${
+                      isPlaying ? "" : "transition-all duration-200 ease-out"
                     }`}
                     style={{
-                      height: `${h}px`
+                      height: `${h}px`,
+                      opacity: isPlaying ? 0.6 + (h / 96) * 0.4 : 0.4,
                     }}
                   />
                 ))}
