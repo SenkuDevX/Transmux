@@ -1146,64 +1146,53 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
         job.progress = 42;
         job.phase = "processing";
 
-        // Download subtitles separately with retry strategies
-        const subDlBase = [
-          "--write-subs", "--write-auto-subs", "--sub-langs", "all,-live_chat",
-          "--convert-subs", "srt",
-          "--skip-download",
-          "-o", path.join(jobDir, "subs.%(ext)s"),
-          "--no-playlist",
-          url,
-        ];
-        const subDlCookieArgs = ["--extractor-args", "youtube:player_client=web;skip=webpage,js"];
-        const subDlNoCookieArgs = ["--extractor-args", "youtube:player_client=android;skip=webpage,js"];
-        const subAttempts: string[][] = [
-          addCookiesArg([...YTDLP_BASE, ...subDlCookieArgs, ...subDlBase], job.id),
-        ];
-        if (fs.existsSync(COOKIES_FILE)) {
-          subAttempts.push([...YTDLP_BASE, ...subDlNoCookieArgs, ...subDlBase]);
-        }
-        if (PROXY_URL) {
-          subAttempts.push([...YTDLP_BASE, ...subDlNoCookieArgs, ...subDlBase, "--proxy", PROXY_URL]);
-        }
-        job.progress = 43;
-        for (const subArgs of subAttempts) {
-          try {
-            const subResult = await new Promise<{ code: number }>((resolve) => {
-              const subProc = spawn("yt-dlp", subArgs);
-              let subErr = "";
-              subProc.stderr.on("data", (d: Buffer) => { subErr += d.toString(); });
-              subProc.on("close", (code) => resolve({ code: code ?? 1 }));
-            });
-            if (subResult.code === 0) break;
-            console.warn(`[Job ${job.id}] Subtitle attempt failed (trying next method)...`);
-          } catch (e) {
-            console.warn(`[Job ${job.id}] Subtitle attempt crashed:`, e);
+        // Download subtitles separately with retry strategies (only when burnSubtitles is enabled)
+        if (settings.burnSubtitles) {
+          const subDlBase = [
+            "--write-subs", "--write-auto-subs", "--sub-langs", "all,-live_chat",
+            "--convert-subs", "srt",
+            "--skip-download",
+            "-o", path.join(jobDir, "subs.%(ext)s"),
+            "--no-playlist",
+            url,
+          ];
+          const subDlCookieArgs = ["--extractor-args", "youtube:player_client=web;skip=webpage,js"];
+          const subDlNoCookieArgs = ["--extractor-args", "youtube:player_client=android;skip=webpage,js"];
+          const subAttempts: string[][] = [
+            addCookiesArg([...YTDLP_BASE, ...subDlCookieArgs, ...subDlBase], job.id),
+          ];
+          if (fs.existsSync(COOKIES_FILE)) {
+            subAttempts.push([...YTDLP_BASE, ...subDlNoCookieArgs, ...subDlBase]);
           }
-        }
-        job.progress = 44;
-
-        // Re-read directory to include newly downloaded subtitle files
-        const updatedFiles = fs.readdirSync(jobDir);
-
-        // Look for yt-dlp thumbnail written alongside the media file
-        const thumbnailFile = files.find(f => /\.(jpg|jpeg|png|webp)$/i.test(f) && f !== "thumbnail.jpg");
-        if (thumbnailFile) {
-          const src = path.join(jobDir, thumbnailFile);
-          try {
-            fs.renameSync(src, path.join(jobDir, "thumbnail.jpg"));
-            console.log(`[CoverArt] Using yt-dlp thumbnail: ${thumbnailFile}`);
-          } catch {
-            fs.copyFileSync(src, path.join(jobDir, "thumbnail.jpg"));
+          if (PROXY_URL) {
+            subAttempts.push([...YTDLP_BASE, ...subDlNoCookieArgs, ...subDlBase, "--proxy", PROXY_URL]);
           }
-        }
+          job.progress = 43;
+          for (const subArgs of subAttempts) {
+            try {
+              const subResult = await new Promise<{ code: number }>((resolve) => {
+                const subProc = spawn("yt-dlp", subArgs);
+                let subErr = "";
+                subProc.stderr.on("data", (d: Buffer) => { subErr += d.toString(); });
+                subProc.on("close", (code) => resolve({ code: code ?? 1 }));
+              });
+              if (subResult.code === 0) break;
+              console.warn(`[Job ${job.id}] Subtitle attempt failed (trying next method)...`);
+            } catch (e) {
+              console.warn(`[Job ${job.id}] Subtitle attempt crashed:`, e);
+            }
+          }
+          job.progress = 44;
+          // Re-read directory to include newly downloaded subtitle files (thumbnail handling moved to separate section)
+          const updatedFiles = fs.readdirSync(jobDir);
 
-        // Collect subtitle files (include both files from original download and separate subtitle download)
-        const SUB_EXTENSIONS = [".vtt", ".srt", ".ass", ".ssa", ".sub"];
-        job.subtitleFiles = updatedFiles.filter(f => SUB_EXTENSIONS.includes(path.extname(f).toLowerCase()));
-        // Also include any subs.* files from the separate subtitle download
-        const subFiles = updatedFiles.filter(f => f.startsWith("subs.") && SUB_EXTENSIONS.some(ext => f.toLowerCase().endsWith(ext)));
-        job.subtitleFiles = [...new Set([...job.subtitleFiles, ...subFiles])];
+          // Collect subtitle files (include both files from original download and separate subtitle download)
+          const SUB_EXTENSIONS = [".vtt", ".srt", ".ass", ".ssa", ".sub"];
+          job.subtitleFiles = updatedFiles.filter(f => SUB_EXTENSIONS.includes(path.extname(f).toLowerCase()));
+          // Also include any subs.* files from the separate subtitle download
+          const subFiles = updatedFiles.filter(f => f.startsWith("subs.") && SUB_EXTENSIONS.some(ext => f.toLowerCase().endsWith(ext)));
+          job.subtitleFiles = [...new Set([...job.subtitleFiles, ...subFiles])];
+        }
       }
     }
 
@@ -1475,33 +1464,34 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
         args.push("-crf", settings.videoCrf);
       }
 
-      // Map Cover Artwork as attached picture stream inside Video Container
-      // WebM does not support attached pictures — skip
-      if (hasCover && outputExt !== "webm") {
-        args.push("-map", "0:v");
-        args.push("-map", "0:a");
-        args.push("-map", "1:0");
-        args.push("-c:v:1", "mjpeg");
-        args.push("-disposition:v:1", "attached_pic");
-        // Map subtitle streams separately with container-compatible codec
-        if (outputExt === "mp4") {
-          args.push("-map", "0:s?");
-          args.push("-c:s", "mov_text");
-        } else if (["mkv", "webm", "mov"].includes(outputExt)) {
-          args.push("-map", "0:s?");
-          args.push("-c:s", "copy");
-        }
-      } else {
-        // No cover art — map all input streams
-        args.push("-map", "0");
-        if (outputExt === "mp4") {
-          args.push("-c:s", "mov_text");
-        }
+    // Map Cover Artwork as attached picture stream inside Video Container
+    // WebM does not support attached pictures — skip
+    // Only include subtitle streams if burnSubtitles is enabled
+    if (hasCover && outputExt !== "webm" && settings.burnSubtitles) {
+      args.push("-map", "0:v");
+      args.push("-map", "0:a");
+      args.push("-map", "1:0");
+      args.push("-c:v:1", "mjpeg");
+      args.push("-disposition:v:1", "attached_pic");
+      // Map subtitle streams separately with container-compatible codec
+      if (outputExt === "mp4") {
+        args.push("-map", "0:s?");
+        args.push("-c:s", "mov_text");
+      } else if (["mkv", "webm", "mov"].includes(outputExt)) {
+        args.push("-map", "0:s?");
+        args.push("-c:s", "copy");
+      }
+    } else if (!isAudioOutput && settings.burnSubtitles) {
+      // No cover art — map all input streams, including subtitles
+      args.push("-map", "0");
+      if (outputExt === "mp4") {
+        args.push("-c:s", "mov_text");
       }
     }
+    }
 
-    // Add external subtitle files (downloaded separately) as additional inputs and maps
-    if (!isAudioOutput && job.subtitleFiles && job.subtitleFiles.length > 0) {
+    // Add external subtitle files (downloaded separately) as additional inputs and maps (only when burnSubtitles is enabled)
+    if (settings.burnSubtitles && !isAudioOutput && job.subtitleFiles && job.subtitleFiles.length > 0) {
       let subInputIdx = (hasCover && outputExt !== "webm") ? 2 : 1;
       for (const subFile of job.subtitleFiles) {
         const subPath = path.join(jobDir, subFile);
