@@ -576,10 +576,21 @@ app.post("/api/url/metadata", async (req, res) => {
     result = await tryMetadata(["--cookies", cookiesToTry[0], "--extractor-args", META_EXTRACTOR]);
   }
 
-  // Strategy 2: android client, no cookies (fallback for limited 360p listing)
+  // Strategy 2: android client, no cookies
   if (!result) {
     console.log("[yt-dlp] Fallback: android client, no cookies...");
     result = await tryMetadata(["--extractor-args", DL_EXTRACTOR_NO_COOKIES]);
+  }
+
+  // Strategy 3: through proxy if configured
+  if (!result && PROXY_URL) {
+    console.log("[yt-dlp] Fallback: through proxy...");
+    result = await execYtDlp(["-J", "--no-playlist", "--playlist-items", "1",
+      "--extractor-args", DL_EXTRACTOR_NO_COOKIES, "--proxy", PROXY_URL, url]);
+    if (result.code !== 0) {
+      lastStderr = result.stderr;
+      result = null;
+    }
   }
 
   if (!result || result.code !== 0) {
@@ -651,13 +662,31 @@ app.post("/api/url/playlist", async (req, res) => {
   const { url } = req.body;
   if (!url) return res.status(400).json({ success: false, error: "URL is required" });
 
-  const { stdout, stderr, code } = await execYtDlp([
+  let { stdout, stderr, code } = await execYtDlp([
     "-J",
     "--flat-playlist",
     "--no-playlist", "--playlist-items", "1:50",
     "--extractor-args", META_EXTRACTOR,
     url,
   ]);
+
+  // Retry through proxy if direct connection failed
+  if (code !== 0 && PROXY_URL) {
+    console.log("[yt-dlp] Playlist extraction failed, retrying through proxy...");
+    const proxyResult = await execYtDlp([
+      "-J",
+      "--flat-playlist",
+      "--no-playlist", "--playlist-items", "1:50",
+      "--extractor-args", DL_EXTRACTOR_NO_COOKIES,
+      "--proxy", PROXY_URL,
+      url,
+    ]);
+    if (proxyResult.code === 0) {
+      stdout = proxyResult.stdout;
+      stderr = proxyResult.stderr;
+      code = proxyResult.code;
+    }
+  }
 
   if (code !== 0) {
     return res.status(500).json({ success: false, error: formatYtdlpError(stderr) });
@@ -884,10 +913,19 @@ app.post("/api/cookies/:jobId", async (req, res) => {
   if (job._url) {
     (async () => {
       try {
-        const metaResult = await execYtDlp(["-J", "--no-playlist", "--playlist-items", "1",
+        let metaResult = await execYtDlp(["-J", "--no-playlist", "--playlist-items", "1",
           "--cookies", cookiesPath,
           "--extractor-args", META_EXTRACTOR,
           job._url]);
+        // Retry through proxy if direct connection failed
+        if (metaResult.code !== 0 && PROXY_URL) {
+          console.log(`[Job ${jobId}] Re-extraction failed, retrying through proxy...`);
+          metaResult = await execYtDlp(["-J", "--no-playlist", "--playlist-items", "1",
+            "--cookies", cookiesPath,
+            "--extractor-args", META_EXTRACTOR,
+            "--proxy", PROXY_URL,
+            job._url]);
+        }
         if (metaResult.code === 0) {
           const data = JSON.parse(metaResult.stdout);
           const formats = (data.formals || [])
