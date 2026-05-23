@@ -44,17 +44,29 @@ async function extractYouTubeCookies() {
   return lines.join("\n") + "\n";
 }
 
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.type === "TRANSMUX_GET_COOKIES") {
+// Use long-lived port connection instead of one-shot sendMessage
+// This keeps the MV3 service worker alive during the full async flow
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== "transmux-cookies") return;
+  port.onMessage.addListener((request) => {
+    if (request.type !== "TRANSMUX_GET_COOKIES") return;
+    const { backendUrl, jobId } = request;
     extractYouTubeCookies()
-      .then((cookiesTxt) => {
-        const backendUrl = request.backendUrl;
-        const jobId = request.jobId;
-        return fetch(`${backendUrl}/api/cookies/${jobId}`, {
+      .then((cookiesTxt) =>
+        fetch(`${backendUrl}/api/cookies/${jobId}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ cookies: cookiesTxt }),
-        });
+        })
+      )
+      .then((res) => res.json())
+      .then((data) => {
+        chrome.storage.local.set({ lastSent: Date.now(), lastSentStr: new Date().toLocaleString() });
+        port.postMessage({ success: true, data });
+      })
+      .catch((err) => port.postMessage({ success: false, error: err.message }));
+  });
+});
       })
       .then((res) => res.json())
       .then((data) => {
