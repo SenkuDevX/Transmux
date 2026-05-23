@@ -337,7 +337,7 @@ app.get("/api/health", (req, res) => {
 });
 
 // Helper: spawn yt-dlp and capture output, with retry on stale cookies or proxy fallback
-const YTDLP_BASE = ["--impersonate", "Chrome-136", "--no-check-formats", "--throttled-rate", "100K", "--buffer-size", "16K", "--no-part"];
+const YTDLP_BASE = ["--impersonate", "Chrome-136", "--no-check-formats"];
 const META_EXTRACTOR = "youtube:player_client=web_embedded;skip=webpage,js";
 const DL_EXTRACTOR = "youtube:player_client=web;skip=webpage,js";
 const DL_EXTRACTOR_NO_COOKIES = "youtube:player_client=android;skip=webpage,js";
@@ -1046,14 +1046,6 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
         }
         if (PROXY_URL) {
           downloadAttempts.push([...YTDLP_BASE, ...dlNoCookieArgs, ...baseDownloadArgs, "--proxy", PROXY_URL]);
-        }
-        // Last resort: skip impersonation (curl_cffi can crash on some TLS/cookie interactions)
-        const noImpersionArgs = [...YTDLP_BASE, ...dlNoCookieArgs, ...baseDownloadArgs].filter(
-          (a, i, arr) => !(a === "--impersonate" || (i > 0 && arr[i - 1] === "--impersonate"))
-        );
-        downloadAttempts.push(noImpersionArgs);
-        if (PROXY_URL) {
-          downloadAttempts.push([...noImpersionArgs, "--proxy", PROXY_URL]);
         }
 
         let lastError: Error | null = null;
