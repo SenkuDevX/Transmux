@@ -25,8 +25,8 @@ process.on("unhandledRejection", (reason) => {
 
 const app = express();
 app.set("trust proxy", 1);
-// Auth middleware for API routes (except public ones)
-app.use(/^\/api\/(?!health|cookies|thumbnail|published).*/, authMiddleware);
+// Selective auth middleware - only protects write operations and sensitive routes
+app.use(/^\/api\/(convert|upload|job\/.*cancel|publish|cleanup|stealth|sync|keys|repair|creator).*/, authMiddleware);
 const PORT = parseInt(process.env.PORT || "3000", 10);
 const BACKEND_URL = process.env.BACKEND_URL || `http://0.0.0.0:${PORT}`;
 const USE_S3 = isS3Configured();

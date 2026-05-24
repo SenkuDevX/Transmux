@@ -5,8 +5,18 @@ function url(path: string): string {
   return `${BASE}${path}`;
 }
 
+function getAuthToken(): string | null {
+  try {
+    const clerkDb = JSON.parse(localStorage.getItem("__clerk_db") || "{}");
+    return clerkDb?.session?.lastActiveToken || null;
+  } catch { return null; }
+}
+
 export function apiFetch(path: string, init?: RequestInit): Promise<Response> {
-  return fetch(url(path), init);
+  const headers: Record<string, string> = { ...(init?.headers as any) || {} };
+  const token = getAuthToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return fetch(url(path), { ...init, headers });
 }
 
 export function apiUrl(path: string): string {

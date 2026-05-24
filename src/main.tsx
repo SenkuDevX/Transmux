@@ -1,16 +1,23 @@
 import {StrictMode, useState, useEffect, type ReactNode} from 'react';
 import {createRoot} from 'react-dom/client';
-import {ClerkProvider, SignedIn, SignedOut, SignIn, useUser} from '@clerk/clerk-react';
+import {ClerkProvider, useUser, SignIn} from '@clerk/clerk-react';
 import App from './App.tsx';
 import './index.css';
 
 const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || '';
 const AUTH_ENABLED = !!CLERK_PUBLISHABLE_KEY;
 
-function AuthGate({ children }: { children: ReactNode }) {
+function ClerkLoginPage() {
   const { isLoaded, isSignedIn, user } = useUser();
+  const [timedOut, setTimedOut] = useState(false);
 
-  // Sync auth state with extension
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!isLoaded) setTimedOut(true);
+    }, 10000);
+    return () => clearTimeout(timer);
+  }, [isLoaded]);
+
   useEffect(() => {
     if (isLoaded) {
       try {
@@ -24,11 +31,33 @@ function AuthGate({ children }: { children: ReactNode }) {
   }, [isLoaded, isSignedIn, user]);
 
   if (!isLoaded) {
+    if (timedOut) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 p-4">
+          <div className="text-center space-y-4 max-w-md">
+            <div className="w-16 h-16 bg-amber-500/20 rounded-2xl flex items-center justify-center mx-auto">
+              <span className="text-2xl">⚠️</span>
+            </div>
+            <h1 className="text-xl font-bold text-white">Clerk Not Responding</h1>
+            <p className="text-sm text-slate-400">The auth service didn't load. Check that:</p>
+            <ul className="text-xs text-slate-500 text-left space-y-1">
+              <li>1. <code className="text-indigo-400">VITE_CLERK_PUBLISHABLE_KEY</code> is correct</li>
+              <li>2. Your app URL is whitelisted in <strong className="text-white">Clerk Dashboard → Application URLs</strong></li>
+              <li>3. Clerk service is online</li>
+            </ul>
+            <button onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-500 cursor-pointer"
+            >Retry</button>
+            <p className="text-xs text-slate-600">Or set <code className="text-amber-400">AUTH_ENABLED=false</code> to skip auth</p>
+          </div>
+        </div>
+      );
+    }
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950">
         <div className="text-center space-y-4">
           <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm text-slate-400">Loading...</p>
+          <p className="text-sm text-slate-400">Loading authentication...</p>
         </div>
       </div>
     );
@@ -75,16 +104,14 @@ function AuthGate({ children }: { children: ReactNode }) {
     );
   }
 
-  return <>{children}</>;
+  return <App />;
 }
 
 function Root() {
   if (AUTH_ENABLED) {
     return (
       <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} afterSignOutUrl="/">
-        <AuthGate>
-          <App />
-        </AuthGate>
+        <ClerkLoginPage />
       </ClerkProvider>
     );
   }
