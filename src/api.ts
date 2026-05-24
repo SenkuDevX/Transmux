@@ -6,10 +6,12 @@ function url(path: string): string {
 }
 
 function getAuthToken(): string | null {
+  // Clerk v5 stores session JWT in the __session cookie
   try {
-    const clerkDb = JSON.parse(localStorage.getItem("__clerk_db") || "{}");
-    return clerkDb?.session?.lastActiveToken || null;
-  } catch { return null; }
+    const m = document.cookie.match(/(?:^|;\s*)__session=([^;]+)/);
+    if (m) return decodeURIComponent(m[1]);
+  } catch {}
+  return null;
 }
 
 export function apiFetch(path: string, init?: RequestInit): Promise<Response> {

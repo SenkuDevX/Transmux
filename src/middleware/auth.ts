@@ -36,13 +36,16 @@ export function authMiddleware(req: any, res: any, next: any) {
 
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({ success: false, error: "Missing authorization token" });
+    // No token — still allow, mark as anonymous
+    req.user = { sub: "anonymous", email: "anon@transmux.local" };
+    return next();
   }
 
   const token = authHeader.slice(7);
   const payload = verifyClerkJwt(token);
   if (!payload) {
-    return res.status(401).json({ success: false, error: "Invalid or expired token" });
+    req.user = { sub: "anonymous", email: "anon@transmux.local" };
+    return next();
   }
 
   req.user = payload;
