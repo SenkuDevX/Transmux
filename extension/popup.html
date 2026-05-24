@@ -2,140 +2,330 @@
 <html>
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Transmux</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      width: 300px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      width: 340px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
       background: #0f172a;
       color: #e2e8f0;
-      padding: 16px;
+      overflow-x: hidden;
     }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+
     .header {
       display: flex;
       align-items: center;
       gap: 10px;
-      margin-bottom: 14px;
+      padding: 14px 16px;
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      border-bottom: 1px solid #1e293b;
     }
     .logo {
-      width: 32px;
-      height: 32px;
-      background: #4f46e5;
-      border-radius: 8px;
+      width: 34px;
+      height: 34px;
+      background: linear-gradient(135deg, #4f46e5, #7c3aed);
+      border-radius: 10px;
       display: flex;
       align-items: center;
       justify-content: center;
       font-size: 16px;
+      box-shadow: 0 2px 8px rgba(79,70,229,0.3);
     }
-    .title {
+    .header-text { flex: 1; }
+    .header-title {
       font-size: 14px;
       font-weight: 700;
+      color: #f1f5f9;
     }
-    .subtitle {
-      font-size: 11px;
-      color: #94a3b8;
+    .header-sub {
+      font-size: 10px;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
-    .status-card {
-      background: #1e293b;
-      border-radius: 10px;
-      padding: 12px;
-      margin-bottom: 12px;
+    .header-status {
+      text-align: right;
     }
-    .status-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 6px 0;
-    }
-    .label {
-      font-size: 12px;
-      color: #94a3b8;
-    }
-    .value {
-      font-size: 12px;
-      font-weight: 600;
-    }
-    .dot {
+    .status-dot {
       width: 8px;
       height: 8px;
       border-radius: 50%;
       display: inline-block;
-      margin-right: 6px;
     }
-    .dot.green { background: #22c55e; }
-    .dot.amber { background: #eab308; }
-    .dot.red { background: #ef4444; }
-    .footer {
+    .status-dot.online { background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,0.5); }
+    .status-dot.offline { background: #ef4444; }
+    .status-label { font-size: 10px; color: #94a3b8; }
+
+    .section {
+      padding: 12px 16px;
+      border-bottom: 1px solid #1e293b;
+    }
+    .section-title {
       font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
       color: #64748b;
-      text-align: center;
-      margin-top: 8px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
-    .btn {
-      width: 100%;
-      padding: 8px;
-      border-radius: 8px;
-      border: none;
-      background: #4f46e5;
-      color: #fff;
+
+    .media-card {
+      background: linear-gradient(135deg, #1e293b, #1a2332);
+      border-radius: 10px;
+      padding: 12px;
+      border: 1px solid #334155;
+      margin-bottom: 8px;
+    }
+    .media-title {
       font-size: 12px;
       font-weight: 600;
-      cursor: pointer;
-      margin-top: 8px;
+      color: #f1f5f9;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 4px;
     }
-    .btn:hover { background: #6366f1; }
-    .btn:disabled { opacity: 0.5; cursor: default; }
-    .log {
-      background: #0f172a;
-      border-radius: 6px;
-      padding: 8px;
-      font-family: monospace;
+    .media-meta {
       font-size: 10px;
-      color: #94a3b8;
-      max-height: 80px;
-      overflow-y: auto;
-      margin-top: 8px;
+      color: #64748b;
     }
+    .media-actions {
+      display: flex;
+      gap: 4px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      padding: 5px 10px;
+      border-radius: 6px;
+      border: none;
+      font-size: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      font-family: inherit;
+    }
+    .btn-primary {
+      background: #4f46e5;
+      color: #fff;
+    }
+    .btn-primary:hover { background: #6366f1; }
+    .btn-success {
+      background: #059669;
+      color: #fff;
+    }
+    .btn-success:hover { background: #10b981; }
+    .btn-amber {
+      background: #d97706;
+      color: #fff;
+    }
+    .btn-amber:hover { background: #f59e0b; }
+    .btn-outline {
+      background: transparent;
+      color: #94a3b8;
+      border: 1px solid #334155;
+    }
+    .btn-outline:hover { background: #1e293b; color: #e2e8f0; }
+    .btn-sm { padding: 3px 8px; font-size: 9px; }
+    .btn:disabled { opacity: 0.4; cursor: default; }
+
+    .status-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .stat-box {
+      background: #1e293b;
+      border-radius: 8px;
+      padding: 10px;
+      text-align: center;
+    }
+    .stat-value {
+      font-size: 18px;
+      font-weight: 800;
+      color: #f1f5f9;
+    }
+    .stat-label {
+      font-size: 9px;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-top: 2px;
+    }
+
+    .site-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 10px;
+      font-weight: 600;
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: #94a3b8;
+    }
+    .site-badge.active {
+      background: rgba(79,70,229,0.15);
+      border-color: #4f46e5;
+      color: #a5b4fc;
+    }
+
+    .log-area {
+      background: #0a0f1a;
+      border-radius: 8px;
+      padding: 8px;
+      font-family: 'SF Mono', 'Cascadia Code', monospace;
+      font-size: 9px;
+      color: #64748b;
+      max-height: 60px;
+      overflow-y: auto;
+      line-height: 1.5;
+      margin-top: 6px;
+    }
+    .log-line { white-space: nowrap; }
+
+    .privacy-note {
+      font-size: 9px;
+      color: #475569;
+      text-align: center;
+      padding: 8px 16px;
+      border-top: 1px solid #1e293b;
+      line-height: 1.4;
+    }
+    .privacy-note strong { color: #64748b; }
+
+    .no-media {
+      text-align: center;
+      padding: 16px;
+      color: #475569;
+      font-size: 11px;
+    }
+    .no-media-icon { font-size: 24px; margin-bottom: 6px; }
+
+    .quick-actions {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    .pulse { animation: pulse 2s infinite; }
   </style>
 </head>
 <body>
+
+  <!-- Header -->
   <div class="header">
-    <div class="logo">🍪</div>
-    <div>
-      <div class="title">Transmux Cookie Relay</div>
-      <div class="subtitle">YouTube cookie autofill for Transmux</div>
+    <div class="logo">⚡</div>
+    <div class="header-text">
+      <div class="header-title">Transmux</div>
+      <div class="header-sub">Media Converter &amp; Cookie Relay</div>
+    </div>
+    <div class="header-status">
+      <div><span class="status-dot online" id="status-dot"></span></div>
+      <div class="status-label" id="status-label">Active</div>
     </div>
   </div>
 
-  <div class="status-card">
-    <div class="status-row">
-      <span class="label">Status</span>
-      <span class="value" id="status-text"><span class="dot green"></span>Active</span>
-    </div>
-    <div class="status-row">
-      <span class="label">YouTube cookies</span>
-      <span class="value" id="cookie-count">—</span>
-    </div>
-    <div class="status-row">
-      <span class="label">Last sent</span>
-      <span class="value" id="last-sent">Never</span>
+  <!-- Detected Site -->
+  <div class="section">
+    <div class="section-title">📍 Current Page</div>
+    <div id="site-detection">
+      <span class="site-badge" id="site-badge">🔍 Detecting...</span>
     </div>
   </div>
 
-  <div>
-    <div class="label" style="margin-bottom:4px">How it works</div>
-    <ul style="font-size:11px;color:#94a3b8;padding-left:16px;line-height:1.6">
-      <li>When Transmux needs YouTube cookies, it will ask</li>
-      <li>Click "Auto-Relay" on the Transmux page</li>
-      <li>This extension sends your signed-in YouTube cookies</li>
-      <li>Cookies are never stored — only relayed once</li>
-    </ul>
+  <!-- Detected Media -->
+  <div class="section" id="media-section">
+    <div class="section-title">🎬 Detected Media</div>
+    <div id="media-content">
+      <div class="no-media">
+        <div class="no-media-icon">🎥</div>
+        <div>No media detected on this page</div>
+        <div style="margin-top:4px;font-size:10px;color:#64748b">Right-click a link to convert with Transmux</div>
+      </div>
+    </div>
   </div>
 
-  <button class="btn" id="test-btn">Test: Check YouTube cookies now</button>
-  <div class="log" id="log"></div>
+  <!-- Quick Actions -->
+  <div class="section">
+    <div class="section-title">⚡ Quick Actions</div>
+    <div class="quick-actions">
+      <button class="btn btn-primary btn-sm" id="action-mp3">🎵 Download MP3</button>
+      <button class="btn btn-success btn-sm" id="action-mp4">🎬 Download MP4</button>
+      <button class="btn btn-amber btn-sm" id="action-gif">🎞 Create GIF</button>
+      <button class="btn btn-outline btn-sm" id="action-clip">✂ Clip Video</button>
+      <button class="btn btn-outline btn-sm" id="action-remux" style="background:#047857;color:#fff;border-color:#059669">📦 Remux</button>
+    </div>
+  </div>
 
-  <div class="footer">Transmux Cookie Relay v1.0</div>
+  <!-- Download Dashboard -->
+  <div class="section" id="dashboard-section" style="display:none">
+    <div class="section-title">📊 Download Dashboard</div>
+    <div class="status-grid" id="dashboard-grid">
+      <div class="stat-box"><div class="stat-value" id="dash-queue">—</div><div class="stat-label">Queued</div></div>
+      <div class="stat-box"><div class="stat-value" id="dash-active">—</div><div class="stat-label">Active</div></div>
+      <div class="stat-box"><div class="stat-value" id="dash-completed">—</div><div class="stat-label">Completed</div></div>
+      <div class="stat-box"><div class="stat-value" id="dash-eta">—</div><div class="stat-label">ETA</div></div>
+    </div>
+    <div id="dashboard-detail" style="margin-top:6px;font-size:10px;color:#64748b"></div>
+  </div>
+
+  <!-- Privacy Mode -->
+  <div class="section" style="display:flex;align-items:center;gap:8px;padding-top:8px;padding-bottom:8px">
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;font-size:10px;color:#94a3b8">
+      <input type="checkbox" id="privacy-toggle" style="accent-color:#4f46e5">
+      🔒 Privacy Mode <span style="color:#64748b;font-size:9px">(local-only processing)</span>
+    </label>
+    <button class="btn btn-outline btn-sm" id="action-all-tabs">📑 All Tabs</button>
+  </div>
+
+  <!-- Sync Accounts & Presets -->
+  <div class="section" style="padding-top:8px;padding-bottom:8px">
+    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+      <span style="font-size:10px;color:#94a3b8;flex:1">☁️ <strong>Cloud Sync</strong></span>
+      <button class="btn btn-outline btn-sm" id="sync-presets">📋 Sync Presets</button>
+      <button class="btn btn-outline btn-sm" id="sync-history">📜 Sync History</button>
+    </div>
+    <div id="sync-status" style="font-size:9px;color:#64748b;margin-top:4px"></div>
+  </div>
+
+  <!-- Cookie Status -->
+  <div class="section">
+    <div class="section-title">🍪 YouTube Cookies</div>
+    <div class="status-grid">
+      <div class="stat-box">
+        <div class="stat-value" id="cookie-count">—</div>
+        <div class="stat-label">Cookies Found</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value" id="cookie-sent-count">0</div>
+        <div class="stat-label">Times Relayed</div>
+      </div>
+    </div>
+    <div style="margin-top:6px;display:flex;gap:4px">
+      <button class="btn btn-outline btn-sm" id="refresh-cookies" style="flex:1">🔄 Refresh Now</button>
+      <button class="btn btn-outline btn-sm" id="test-cookies" style="flex:1">🔍 Test Cookies</button>
+    </div>
+    <div class="log-area" id="log"></div>
+  </div>
+
+  <!-- Privacy Note -->
+  <div class="privacy-note">
+    <strong>🔒 Your privacy:</strong> Cookies are encrypted in transit, used <strong>only</strong> for your conversions, and never stored or shared. <a href="https://KurbaniBoy-transmux.hf.space" target="_blank" style="color:#4f46e5;text-decoration:none">Open Transmux →</a>
+  </div>
 
   <script src="popup.js"></script>
 </body>

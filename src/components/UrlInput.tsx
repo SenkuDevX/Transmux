@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { Link2, Sparkles, Loader2, AlertCircle, Chrome, RefreshCw } from "lucide-react";
+import { Link2, Sparkles, Loader2, AlertCircle, Chrome, RefreshCw, List } from "lucide-react";
 import { apiFetch } from "../api";
 
 const BACKEND_URL = import.meta.env.VITE_API_URL || window.location.origin;
@@ -17,6 +17,8 @@ export default function UrlInput({ onMetadataFetched, onUrlReset, activeUrl, onL
   const [isLoading, setIsLoading] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [waitingCookies, setWaitingCookies] = useState(false);
+  const [multiUrl, setMultiUrl] = useState(false);
+  const [multiUrls, setMultiUrls] = useState("");
   const pendingUrl = useRef<string>("");
 
   const submitUrl = async (targetUrl: string) => {
@@ -69,6 +71,34 @@ export default function UrlInput({ onMetadataFetched, onUrlReset, activeUrl, onL
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (multiUrl) {
+      const urls = multiUrls.split("\n").map((u) => u.trim()).filter((u) => u.startsWith("http"));
+      if (urls.length === 0) {
+        setErrorText("Paste at least one valid URL (starting with http:// or https://)");
+        return;
+      }
+      if (urls.length === 1) {
+        await submitUrl(urls[0]);
+        return;
+      }
+      // Multiple URLs: create synthetic playlist
+      onPlaylistDetected?.({
+        title: `Batch Import (${urls.length} URLs)`,
+        count: urls.length,
+        isPlaylist: true,
+        entries: urls.map((u, i) => ({
+          index: i,
+          id: `batch-${i}`,
+          title: `URL ${i + 1}`,
+          url: u,
+          duration: 0,
+          thumbnail: "",
+        })),
+      });
+      return;
+    }
+
     if (!url.trim()) return;
     await submitUrl(url.trim());
   };
@@ -135,38 +165,80 @@ export default function UrlInput({ onMetadataFetched, onUrlReset, activeUrl, onL
         </div>
       ) : (
         <form id="url-input-form" onSubmit={handleSubmit} className="relative">
-          <div className="relative flex items-center">
-            <div className="absolute left-4 text-slate-400">
-              <Link2 className="h-5 w-5" />
-            </div>
-            <input
-              type="text"
-              id="url-field"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="Paste media link here (e.g. YouTube, Vimeo, Soundcloud...)"
-              disabled={isLoading || waitingCookies}
-              className="w-full pl-12 pr-32 py-3.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 focus:border-slate-900 dark:focus:border-slate-200 focus:ring-1 focus:ring-slate-900 dark:focus:ring-slate-200 rounded-2xl text-sm placeholder-slate-400 dark:placeholder-slate-500 text-slate-900 dark:text-slate-100 outline-none transition-all"
-            />
-            <button
-              type="submit"
-              id="url-submit-btn"
-              disabled={isLoading || !url.trim() || waitingCookies}
-              className="absolute right-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 dark:bg-indigo-650 dark:hover:bg-indigo-600 disabled:bg-slate-100 dark:disabled:bg-slate-950 disabled:text-slate-400 dark:disabled:text-slate-600 text-white dark:text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
+          {/* Mode toggle */}
+          <div className="flex items-center gap-2 mb-2">
+            <button type="button" onClick={() => setMultiUrl(false)}
+              className={`text-[10px] px-2.5 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+                !multiUrl
+                  ? "bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-900"
+                  : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-transparent"
+              }`}
             >
-              {isLoading ? (
-                <>
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Analyzing
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-3.5 w-3.5" />
-                  Analyze Url
-                </>
-              )}
+              <Link2 className="h-3 w-3 inline mr-1" />Single URL
+            </button>
+            <button type="button" onClick={() => setMultiUrl(true)}
+              className={`text-[10px] px-2.5 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+                multiUrl
+                  ? "bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-900"
+                  : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-transparent"
+              }`}
+            >
+              <List className="h-3 w-3 inline mr-1" />Multi URL
             </button>
           </div>
+
+          {multiUrl ? (
+            <div className="relative">
+              <textarea
+                id="url-textarea"
+                value={multiUrls}
+                onChange={(e) => setMultiUrls(e.target.value)}
+                placeholder="Paste multiple URLs, one per line:&#10;https://youtube.com/watch?v=...&#10;https://soundcloud.com/...&#10;https://twitter.com/..."
+                disabled={isLoading || waitingCookies}
+                rows={5}
+                className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 focus:border-slate-900 dark:focus:border-slate-200 focus:ring-1 focus:ring-slate-900 dark:focus:ring-slate-200 rounded-2xl p-3 text-sm placeholder-slate-400 dark:placeholder-slate-500 text-slate-900 dark:text-slate-100 outline-none transition-all resize-none font-mono"
+              />
+              <button
+                type="submit"
+                id="url-multi-submit-btn"
+                disabled={isLoading || !multiUrls.trim() || waitingCookies}
+                className="absolute bottom-3 right-3 px-4 py-2 bg-slate-900 hover:bg-slate-800 dark:bg-indigo-650 dark:hover:bg-indigo-600 disabled:bg-slate-100 dark:disabled:bg-slate-950 disabled:text-slate-400 dark:disabled:text-slate-600 text-white dark:text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                {isLoading ? (
+                  <><Loader2 className="h-3.5 w-3.5 animate-spin" />Analyzing</>
+                ) : (
+                  <><Sparkles className="h-3.5 w-3.5" />Import URLs</>
+                )}
+              </button>
+            </div>
+          ) : (
+            <div className="relative flex items-center">
+              <div className="absolute left-4 text-slate-400">
+                <Link2 className="h-5 w-5" />
+              </div>
+              <input
+                type="text"
+                id="url-field"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="Paste media link here (e.g. YouTube, Vimeo, Soundcloud...)"
+                disabled={isLoading || waitingCookies}
+                className="w-full pl-12 pr-32 py-3.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 focus:border-slate-900 dark:focus:border-slate-200 focus:ring-1 focus:ring-slate-900 dark:focus:ring-slate-200 rounded-2xl text-sm placeholder-slate-400 dark:placeholder-slate-500 text-slate-900 dark:text-slate-100 outline-none transition-all"
+              />
+              <button
+                type="submit"
+                id="url-submit-btn"
+                disabled={isLoading || !url.trim() || waitingCookies}
+                className="absolute right-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 dark:bg-indigo-650 dark:hover:bg-indigo-600 disabled:bg-slate-100 dark:disabled:bg-slate-950 disabled:text-slate-400 dark:disabled:text-slate-600 text-white dark:text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                {isLoading ? (
+                  <><Loader2 className="h-3.5 w-3.5 animate-spin" />Analyzing</>
+                ) : (
+                  <><Sparkles className="h-3.5 w-3.5" />Analyze Url</>
+                )}
+              </button>
+            </div>
+          )}
 
           <p id="url-disclaimer" className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 px-1">
             * Transmux is designed to pull metadata and format layouts of public or user-authorized sources only.

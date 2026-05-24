@@ -3,125 +3,167 @@ import { BookOpen, ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
 
 export const EDUCATIONAL_TIPS = [
   {
-    title: "Downloading Videos",
-    tag: "Stream Capture",
-    color: "from-blue-500 to-indigo-500",
-    text: "Paste any supported URL to analyze available formats. Transmux downloads the original stream and re-encodes it to your chosen output using FFmpeg."
-  },
-  {
-    title: "Uploading to Gallery",
-    tag: "Community Share",
-    color: "from-purple-500 to-pink-500",
-    text: "After conversion you can publish your media to the public gallery. Published files get a shareable link and appear in the feed for others."
-  },
-  {
-    title: "Meet the Creator",
-    tag: "Open Source",
-    color: "from-amber-500 to-orange-500",
-    text: "Transmux (Project Saga) was built by SenkuDevX as an open-source media conversion platform. The codebase is on GitHub."
-  },
-  {
-    title: "Download Speeds",
-    tag: "Performance",
-    color: "from-cyan-500 to-teal-500",
-    text: "Speed depends on the source server and your connection. Large 4K videos can take several minutes. A stable stable connection helps."
-  },
-  {
-    title: "Supported Sources",
-    tag: "Compatibility",
-    color: "from-violet-500 to-fuchsia-500",
-    text: "Transmux supports YouTube and hundreds of other sites via yt-dlp. Paste any supported video URL or upload a local file."
-  },
-  {
-    title: "Format Guide",
-    tag: "Codec Tips",
-    color: "from-rose-500 to-red-500",
-    text: "MP4 with H.264 + AAC offers the best compatibility. MKV supports advanced subtitle embedding. For audio-only Opus gives best quality."
-  },
-  {
-    title: "MKV Container",
-    tag: "Nesting Star",
-    color: "from-sky-500 to-indigo-500",
-    text: "MKV is an open-standard container that can hold unlimited video audio and subtitle streams plus chapters and menus in one file."
-  },
-  {
-    title: "MP4 Standard",
-    tag: "Streaming",
+    title: "Install the Browser Extension",
+    tag: "Essential",
     color: "from-indigo-500 to-purple-500",
-    text: "MP4 is the king of direct playback across Safari Chrome iOS and game consoles. It is standardized by ISO."
+    text: "The Transmux Cookie Relay extension eliminates YouTube bot blocks. Install it, and cookies are auto-synced when needed — no manual pasting. Your cookies stay encrypted and are used only for your own conversions."
   },
   {
-    title: "AAC vs MP3",
-    tag: "Audio Encoding",
-    color: "from-purple-500 to-pink-500",
-    text: "AAC succeeded MP3 with optimized psychoacoustic filtering giving superior quality at identical bitrates."
+    title: "Best Format for Compatibility",
+    tag: "Format Guide",
+    color: "from-blue-500 to-indigo-500",
+    text: "MP4 with H.264 video + AAC audio works on every device: iPhone, Android, Windows, Mac, smart TVs, and game consoles. Use MKV if you need multiple subtitle tracks."
   },
   {
-    title: "Remuxing vs Transcoding",
+    title: "Remux for Instant Conversion",
     tag: "Zero Quality Loss",
     color: "from-emerald-500 to-teal-500",
-    text: "Selecting Copy triggers remuxing instead of re-encoding. It extracts intact streams and updates the container metadata in milliseconds."
+    text: "Selecting Copy for codec triggers remuxing instead of re-encoding. It takes seconds instead of minutes and preserves 100% of the original quality. Use this when you only need to change container format."
   },
   {
-    title: "Lossless Audio",
-    tag: "FLAC & WAV",
-    color: "from-pink-500 to-rose-500",
-    text: "FLAC compresses audio without any quality loss. WAV is uncompressed. Both preserve master-recording accuracy."
+    title: "Best Audio Format by Use Case",
+    tag: "Audio Encoding",
+    color: "from-purple-500 to-pink-500",
+    text: "Opus gives best quality at low bitrates (great for streaming). AAC is most compatible (iTunes, Android). FLAC is lossless (archiving). MP3 works everywhere but is outdated."
   },
   {
-    title: "FFmpeg Engine",
-    tag: "Universal Tool",
+    title: "Cookie Auto-Sync Flow",
+    tag: "YouTube Fix",
     color: "from-amber-500 to-orange-500",
-    text: "Founded by Fabrice Bellard in 2000 FFmpeg runs on billions of devices daily. Transmux uses it under the hood."
+    text: "When YouTube blocks a download, Transmux pauses and opens the cookie modal. If the extension is installed, it auto-sends cookies in under a second. If not, you have 8 seconds to paste manually."
   },
   {
-    title: "SRT vs ASS Subtitles",
-    tag: "Text Styles",
-    color: "from-cyan-500 to-blue-500",
-    text: "SRT is simple text with time markers. ASS allows custom fonts colors positioning and animated karaoke effects."
+    title: "4K Downloads Need Patience",
+    tag: "Performance",
+    color: "from-cyan-500 to-teal-500",
+    text: "A 4K video can be 5-15GB. The server downloads with 32 parallel fragments using aria2c. Even on fast connections, expect 3-10 minutes for large 4K files."
   },
   {
-    title: "Bitrate Explained",
-    tag: "Quality vs Size",
+    title: "Lower CRF = Better Quality",
+    tag: "Video Encoding",
+    color: "from-rose-500 to-red-500",
+    text: "CRF (Constant Rate Factor) controls video quality: 12 is near-lossless, 18 is visually transparent, 28 is good for web uploads. Each increment of 6 roughly doubles file size."
+  },
+  {
+    title: "Trim Before Converting",
+    tag: "Save Time",
     color: "from-green-500 to-emerald-500",
-    text: "Higher bitrate means better quality but larger file size. For music 128-320 kbps is typical. For video it varies by resolution."
+    text: "Use trim presets (First 15s, 30s, 60s) to convert only the segment you need. This dramatically reduces processing time and file size. The visual timeline shows your selection."
   },
   {
-    title: "Resolution Guide",
-    tag: "SD HD 4K",
+    title: "YouTube Thumbnail as Cover Art",
+    tag: "Album Art",
+    color: "from-pink-500 to-rose-500",
+    text: "When converting YouTube to MP3/FLAC/Opus, Transmux automatically downloads the highest-res thumbnail and embeds it as cover art. No manual tagging needed."
+  },
+  {
+    title: "Subtitle Languages",
+    tag: "Subtitles",
+    color: "from-violet-500 to-fuchsia-500",
+    text: "Transmux downloads ALL available subtitle languages from YouTube (both manual and auto-generated). They're converted to SRT format and burned into the output video."
+  },
+  {
+    title: "Bitrate vs Quality",
+    tag: "Size Tradeoff",
     color: "from-yellow-500 to-orange-500",
-    text: "480p is standard definition 720p/1080p is HD and 2160p is 4K Ultra HD. Higher resolution needs more bandwidth."
+    text: "128kbps MP3 is acceptable for podcasts. 192-256kbps is good for music. 320kbps is indistinguishable from lossless for most people. For video, bitrate varies by resolution and codec."
   },
   {
-    title: "Frame Rate",
+    title: "Frame Rate Guide",
     tag: "FPS",
     color: "from-red-500 to-rose-500",
-    text: "24 fps is cinematic 30 fps is standard video and 60 fps is smooth for gaming and sports. Higher fps looks smoother but needs more processing."
+    text: "24fps = cinematic (movies). 30fps = standard (TV, YouTube). 60fps = smooth (gaming, sports). Converting from 60 to 30fps drops half the frames but can look choppy."
   },
   {
-    title: "Internet Downloading",
-    tag: "How It Works",
-    color: "from-blue-500 to-sky-500",
-    text: "When you paste a URL the system fetches the media stream from the source server. The download speed depends on your connection to that server."
+    title: "Resolution Scaling",
+    tag: "Video Size",
+    color: "from-sky-500 to-indigo-500",
+    text: "Downscaling 4K to 1080p reduces file size ~75% with minimal quality loss. Upscaling 720p to 4K doesn't add real detail — it just makes the file bigger. Always prefer original resolution."
   },
   {
-    title: "File Uploading",
-    tag: "Local Media",
-    color: "from-teal-500 to-cyan-500",
-    text: "You can upload local files for conversion too. The file is stored temporarily and processed the same way as URL downloads."
+    title: "AV1 vs H.265 vs H.264",
+    tag: "Codec Battle",
+    color: "from-blue-500 to-cyan-500",
+    text: "H.264: widest compatibility. H.265/HEVC: ~50% better compression than H.264. AV1: ~30% better than H.265 but very slow to encode. For quick conversions, stick with H.264."
   },
   {
-    title: "What is Transcoding",
-    tag: "Conversion",
-    color: "from-indigo-500 to-violet-500",
-    text: "Transcoding converts media from one format to another. It decompresses the source then re-encodes it to your chosen output format."
-  },
-  {
-    title: "Storage & Cleanup",
-    tag: "Auto Delete",
+    title: "Media Cleanup Schedule",
+    tag: "Storage",
     color: "from-slate-500 to-gray-500",
-    text: "Converted files are automatically deleted after some time to save space. Always download your files before the cleanup runs."
-  }
+    text: "All converted files are automatically deleted after 1 hour. Published gallery items also expire after 1 hour. Always download your results before they're cleaned up."
+  },
+  {
+    title: "Why Use the Extension?",
+    tag: "Privacy",
+    color: "from-emerald-500 to-green-500",
+    text: "The extension only activates when Transmux requests cookies. It sends them directly to the server via encrypted HTTPS. They're used ONLY for your current job and never stored or logged."
+  },
+  {
+    title: "Batch Playlist Conversion",
+    tag: "Power User",
+    color: "from-indigo-500 to-violet-500",
+    text: "Paste a YouTube playlist URL and Transmux detects it automatically. Convert up to 50 videos at once. All outputs are packaged into a single ZIP file for easy download."
+  },
+  {
+    title: "Audio Channels Explained",
+    tag: "Sound Setup",
+    color: "from-purple-500 to-pink-500",
+    text: "Mono: single channel (podcasts). Stereo: two channels (music, standard video). 5.1 Surround: six channels (movies). Converting stereo to 5.1 doesn't create real surround."
+  },
+  {
+    title: "Sample Rate Matters",
+    tag: "Audio Quality",
+    color: "from-cyan-500 to-teal-500",
+    text: "44.1kHz is CD quality. 48kHz is standard for video. 96kHz is studio-grade but files are much larger. Upsampling doesn't add quality — stick with the source sample rate."
+  },
+  {
+    title: "The Server Stack",
+    tag: "Behind the Scenes",
+    color: "from-amber-500 to-orange-500",
+    text: "Node.js + Express handles requests. FFmpeg transcodes. yt-dlp extracts media from 1000+ sites. aria2c accelerates downloads. curl_cffi impersonates Chrome-136 browser. All open-source."
+  },
+  {
+    title: "Use Size Targets for Platform Limits",
+    tag: "Smart Compression",
+    color: "from-red-500 to-pink-500",
+    text: "Discord: 25MB limit. WhatsApp: 16MB. Email: 10-25MB. Use Smart Compression's target size dropdown to auto-tune settings. The server adjusts bitrate, CRF, and resolution to fit."
+  },
+  {
+    title: "Preview Before Full Export",
+    tag: "Save Time",
+    color: "from-cyan-500 to-blue-500",
+    text: "Use the Preview popup on completed jobs to inspect quality before downloading. For video, the native player shows exact output. For audio, the waveform + spinning vinyl visualization confirms quality."
+  },
+  {
+    title: "Batch Recipes for Repeated Tasks",
+    tag: "Power User",
+    color: "from-fuchsia-500 to-purple-500",
+    text: "Save your most-used settings as Batch Recipes. Trim intro + normalize audio + convert to H.264 — save as one recipe and apply with one click. Recipes are stored in your browser's localStorage."
+  },
+  {
+    title: "Use Queue Jobs for Heavy Files",
+    tag: "Performance",
+    color: "from-orange-500 to-amber-500",
+    text: "Large 4K videos can take 10+ minutes. Send them to the queue and let the server process them in priority order. Short jobs jump ahead automatically. Check progress anytime."
+  },
+  {
+    title: "Keep Originals When Testing Quality",
+    tag: "Best Practice",
+    color: "from-blue-500 to-indigo-500",
+    text: "Always keep the original file when testing different quality settings. The server never modifies originals — each conversion creates a new output file. Compare size and visual quality side-by-side."
+  },
+  {
+    title: "Smart Compression for Platform Limits",
+    tag: "Size Targeting",
+    color: "from-emerald-500 to-teal-500",
+    text: "Use Smart Compression's target size dropdown to fit files under platform limits: 25MB for Discord, 16MB for WhatsApp, 10MB for email. The server auto-tunes bitrate, CRF, and resolution."
+  },
+  {
+    title: "Subtitles as Selectable Tracks",
+    tag: "Best Practice",
+    color: "from-violet-500 to-fuchsia-500",
+    text: "When possible, keep subtitles as selectable tracks (MKV with copy codec) rather than burning them into the video. Selectable subs retain language info, can be toggled off, and preserve original formatting."
+  },
 ];
 
 export default function TipsCard() {

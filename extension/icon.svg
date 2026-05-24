@@ -1,8 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-  <rect width="128" height="128" rx="24" fill="#4f46e5"/>
-  <circle cx="44" cy="55" r="22" fill="#fff"/>
-  <circle cx="84" cy="55" r="22" fill="#fff"/>
-  <path d="M36 92 Q64 78 92 92" stroke="#fff" stroke-width="6" fill="none" stroke-linecap="round"/>
-  <rect x="58" y="72" width="12" height="10" rx="3" fill="#fff"/>
-  <text x="64" y="108" text-anchor="middle" font-size="11" fill="#fff" font-family="sans-serif" font-weight="bold">COOKIES</text>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4f46e5"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="24" fill="url(#bg)"/>
+  <!-- Lightning bolt -->
+  <path d="M68 16 L36 68 L58 68 L52 112 L96 56 L72 56 L82 16 Z" fill="#fff" opacity="0.95"/>
+  <path d="M68 16 L36 68 L58 68 L52 112 L96 56 L72 56 L82 16 Z" fill="none" stroke="#c7d2fe" stroke-width="1.5" opacity="0.3"/>
 </svg>

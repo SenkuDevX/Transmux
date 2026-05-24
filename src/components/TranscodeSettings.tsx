@@ -1,7 +1,11 @@
-import React, { useState, useEffect } from "react";
-import { Sliders, Video, Music, Scissors, VolumeX, RefreshCw, AlertTriangle, HelpCircle } from "lucide-react";
+import React, { useState, useEffect, Suspense } from "react";
+import { Sliders, Video, Music, Scissors, VolumeX, RefreshCw, AlertTriangle, HelpCircle, FlaskConical, Sparkles, Settings2 } from "lucide-react";
 import { ConversionSettings } from "../types";
 import CustomSelect from "./CustomSelect";
+import WaveformEditor from "./WaveformEditor";
+
+const RecipeManager = React.lazy(() => import("./RecipeManager"));
+const CreatorToolkit = React.lazy(() => import("./CreatorToolkit"));
 
 function TooltipIcon({ text }: { text: string }) {
   const [show, setShow] = useState(false);
@@ -60,10 +64,161 @@ export default function TranscodeSettings({
   const [trimStart, setTrimStart] = useState("");
   const [trimEnd, setTrimEnd] = useState("");
   const [stripAudio, setStripAudio] = useState(false);
+  const [webhookUrl, setWebhookUrl] = useState("");
   const [burnSubtitles, setBurnSubtitles] = useState(false);
   const [qualityPreset, setQualityPreset] = useState("keep");
   const [trimError, setTrimError] = useState<string | null>(null);
   const [validationWarnings, setValidationWarnings] = useState<string[] | null>(null);
+  const [smartCompressionTarget, setSmartCompressionTarget] = useState("");
+  const [showRecipeManager, setShowRecipeManager] = useState(false);
+  const [showCreatorToolkit, setShowCreatorToolkit] = useState(false);
+  const [hardwareAccel, setHardwareAccel] = useState("");
+  const [availableHwAccel, setAvailableHwAccel] = useState<string[]>([]);
+  const [thumbnails, setThumbnails] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetch("/api/hardware-accel")
+      .then((r) => r.json())
+      .then((d) => { if (d.success && d.available) setAvailableHwAccel(d.available); })
+      .catch(() => {});
+  }, []);
+
+  // Fetch frame thumbnails when duration is known
+  useEffect(() => {
+    if (!initialDuration || initialDuration <= 0) return;
+    const fetchThumbs = async () => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const jobId = params.get("jobId") || "";
+        if (!jobId) return;
+        const res = await fetch(`/api/thumbnails/${jobId}?count=20`);
+        const data = await res.json();
+        if (data.success && data.thumbnails) setThumbnails(data.thumbnails);
+      } catch {}
+    };
+    fetchThumbs();
+  }, [initialDuration]);
+
+  // Helper: parse bitrate string like "192k" or "512k" to kbps number
+  const parseBitrate = (val: string): number => {
+    if (!val || val === "keep") return 0;
+    const m = val.match(/(\d+)(k|m)?/i);
+    if (!m) return 0;
+    const num = parseInt(m[1]);
+    const unit = (m[2] || "k").toLowerCase();
+    return unit === "m" ? num * 1000 : num;
+  };
+
+  // Helper: estimate file size based on current settings
+  function formatEstimatedSize(): string {
+    if (!initialDuration || initialDuration <= 0) return "—";
+    const durSec = parseTimeToSeconds(trimEnd) ?? initialDuration;
+    const startSec = parseTimeToSeconds(trimStart) ?? 0;
+    const effectiveDur = Math.max(0, durSec - startSec);
+    if (effectiveDur <= 0) return "—";
+
+    let totalKbps = 0;
+
+    // Video bitrate
+    if (activeTab === "video") {
+      if (videoBitrate && videoBitrate !== "keep") {
+        totalKbps += parseBitrate(videoBitrate);
+      } else {
+        const crf = videoCrf === "keep" ? 23 : parseInt(videoCrf);
+        const res = videoResolution === "keep" ? 1080 : parseInt(videoResolution.split("x")[1] || "1080");
+        const crfEstimate = res * 3 * Math.max(1, 30 - crf) / 10;
+        totalKbps += crfEstimate;
+      }
+    }
+
+    // Audio bitrate
+    if (audioBitrate && audioBitrate !== "keep") {
+      totalKbps += parseBitrate(audioBitrate);
+    } else {
+      totalKbps += 192;
+    }
+
+    if (totalKbps <= 0) totalKbps = 1000;
+    const sizeMB = (totalKbps * effectiveDur) / 8 / 1024;
+    if (sizeMB > 1024) return `${(sizeMB / 1024).toFixed(1)} GB`;
+    return `${Math.round(sizeMB)} MB`;
+  }
+
+  function formatEstimatedTime(): string {
+    if (!initialDuration || initialDuration <= 0) return "—";
+    const durSec = parseTimeToSeconds(trimEnd) ?? initialDuration;
+    const startSec = parseTimeToSeconds(trimStart) ?? 0;
+    const effectiveDur = Math.max(0, durSec - startSec);
+    if (effectiveDur <= 0) return "—";
+    if (videoCodec === "keep" && audioCodec === "keep" && qualityPreset === "keep") return "< 5s";
+    const factor = videoCodec && videoCodec !== "keep" ? (videoCodec.includes("265") || videoCodec.includes("av1") ? 0.8 : 0.4) : 0.1;
+    const estSec = effectiveDur * factor;
+    if (estSec < 60) return `${Math.round(estSec)}s`;
+    return `${Math.floor(estSec / 60)}m ${Math.round(estSec % 60)}s`;
+  }
+
+  const qualityScore: number = (() => {
+    let score = 7;
+    if (activeTab === "video") {
+      if (videoCodec === "keep") score = 10;
+      else if (videoCodec === "libx264") score = 8;
+      else if (videoCodec === "libx265") score = 8;
+      else if (videoCodec === "prores") score = 9;
+      else score = 7;
+      const crf = videoCrf === "keep" ? 23 : parseInt(videoCrf);
+      if (crf <= 18) score += 1;
+      else if (crf >= 32) score -= 2;
+      if (videoResolution !== "keep") {
+        const h = parseInt(videoResolution.split("x")[1] || "0");
+        if (h >= 1080) score += 1;
+        else if (h <= 480) score -= 1;
+      }
+    }
+    if (audioBitrate !== "keep") {
+      const ab = parseBitrate(audioBitrate);
+      if (ab >= 320) score += 1;
+      else if (ab <= 96) score -= 1;
+    }
+    if (audioCodec === "flac" || audioCodec === "alac") score += 1;
+    return Math.max(1, Math.min(10, score));
+  })();
+
+  function applySmartCompression(targetMB: number) {
+    if (!initialDuration || initialDuration <= 0) return;
+    const durSec = parseTimeToSeconds(trimEnd) ?? initialDuration;
+    const startSec = parseTimeToSeconds(trimStart) ?? 0;
+    const effectiveDur = Math.max(0, durSec - startSec);
+    if (effectiveDur <= 0) return;
+
+    const targetKbps = Math.floor((targetMB * 8 * 1024) / effectiveDur);
+    const audioBudget = Math.min(192, Math.max(64, Math.floor(targetKbps * 0.15)));
+    const videoBudget = Math.max(100, targetKbps - audioBudget);
+
+    // Auto-select resolution based on budget
+    let res = "1920x1080";
+    if (videoBudget < 500) res = "640x360";
+    else if (videoBudget < 1000) res = "854x480";
+    else if (videoBudget < 2500) res = "1280x720";
+
+    // Auto-select CRF based on budget
+    let crf = "23";
+    if (videoBudget < 500) crf = "32";
+    else if (videoBudget < 1000) crf = "28";
+    else if (videoBudget < 2500) crf = "23";
+    else crf = "18";
+
+    if (activeTab === "video") {
+      setVideoCodec("libx264");
+      setVideoResolution(res);
+      setVideoFps("30");
+      setVideoCrf(crf);
+    }
+    setAudioCodec("aac");
+    setAudioBitrate(`${audioBudget}k`);
+    setAudioSampleRate("44100");
+    setAudioChannels("2");
+    setQualityPreset("custom");
+  }
 
   // Helper: analyze media stream specs for validation warnings
   const getSourceSpecs = () => {
@@ -292,7 +447,9 @@ export default function TranscodeSettings({
       trimEnd,
       burnSubtitles,
       stripAudio,
-      selectedFormatId: "best" // handled locally in parent component
+      selectedFormatId: "best",
+      hardwareAccel: hardwareAccel || undefined,
+      webhookUrl: webhookUrl || undefined,
     });
   };
 
@@ -446,7 +603,98 @@ export default function TranscodeSettings({
         </div>
       </div>
 
-      {/* Compression Quality Slider — prominent control for file size vs quality */}
+      {/* File Size Predictor — real-time estimate */}
+      {initialDuration && initialDuration > 0 && (
+        <div id="size-predictor" className="border-t border-slate-100 dark:border-slate-800 pt-4">
+          <div className="bg-gradient-to-r from-indigo-50/80 to-purple-50/80 dark:from-indigo-950/20 dark:to-purple-950/20 border border-indigo-200/60 dark:border-indigo-900/40 rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                📊 Estimated Output
+              </span>
+              <span className="text-[11px] font-mono font-bold text-indigo-700 dark:text-indigo-300" id="size-estimate">
+                {formatEstimatedSize()}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div className="bg-white/70 dark:bg-slate-900/50 rounded-lg p-2">
+                <div className="text-xs font-bold text-indigo-700 dark:text-indigo-300">{formatEstimatedSize()}</div>
+                <div className="text-[8px] text-slate-500 dark:text-slate-400 uppercase tracking-wider mt-0.5">Est. Size</div>
+              </div>
+              <div className="bg-white/70 dark:bg-slate-900/50 rounded-lg p-2">
+                <div className="text-xs font-bold text-indigo-700 dark:text-indigo-300">{formatEstimatedTime()}</div>
+                <div className="text-[8px] text-slate-500 dark:text-slate-400 uppercase tracking-wider mt-0.5">Est. Time</div>
+              </div>
+              <div className="bg-white/70 dark:bg-slate-900/50 rounded-lg p-2">
+                <div className="text-xs font-bold text-indigo-700 dark:text-indigo-300">{qualityScore}/10</div>
+                <div className="text-[8px] text-slate-500 dark:text-slate-400 uppercase tracking-wider mt-0.5">Quality</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[9px] text-slate-500 dark:text-slate-400">Quality Score:</span>
+              <div className="flex-1 h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-red-500 via-yellow-500 to-green-500 rounded-full transition-all duration-300" style={{ width: `${qualityScore * 10}%` }} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Smart Compression Mode */}
+      {initialDuration && initialDuration > 0 && (
+        <div id="smart-compression" className="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-4">
+          <div className="flex items-center justify-between">
+            <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              🎯 Smart Compression — Fit Under Target Size
+            </label>
+            {smartCompressionTarget && (
+              <span className="text-[9px] font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded">
+                Auto-tuning active
+              </span>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <select
+              value={smartCompressionTarget}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSmartCompressionTarget(val);
+                if (val) applySmartCompression(parseInt(val));
+              }}
+              className="flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 outline-none font-mono"
+            >
+              <option value="">— Select target size —</option>
+              <option value="10">10 MB</option>
+              <option value="25">25 MB</option>
+              <option value="50">50 MB</option>
+              <option value="100">100 MB</option>
+              <option value="250">250 MB</option>
+              <option value="500">500 MB</option>
+              <option value="1000">1 GB</option>
+            </select>
+            <button
+              type="button"
+              onClick={() => {
+                if (activeTab === "video") {
+                  setVideoCodec("libx264"); setVideoResolution("1920x1080"); setVideoFps("30"); setVideoCrf("23");
+                }
+                setAudioCodec("aac"); setAudioBitrate("192k"); setAudioSampleRate("44100"); setAudioChannels("2");
+                setQualityPreset("medium");
+              }}
+              className="px-3 py-2 text-[10px] font-bold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
+              title="Reset to default settings"
+            >
+              Reset
+            </button>
+          </div>
+          {smartCompressionTarget && (
+            <div className="text-[9px] text-emerald-600 dark:text-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/10 border border-emerald-200/50 dark:border-emerald-900/40 rounded-lg px-3 py-2 leading-relaxed">
+              ⚡ Settings auto-tuned to fit under <strong>{smartCompressionTarget} MB</strong>. Estimated size: <strong>{formatEstimatedSize()}</strong>. Adjust settings manually or select a different target.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Video Compression slider */}
       <div id="compression-slider-container" className="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-4">
         <div className="flex items-center justify-between">
           <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
@@ -475,7 +723,7 @@ export default function TranscodeSettings({
       <div id="settings-group-container" className="space-y-5">
         
         {/* VIDEO ENCODING PANEL (Only visible if video tab is active) */}
-        {activeTab === "video" && (
+        {activeTab === "video" && <React.Fragment>
           <div id="video-parameters-box" className="space-y-4 border-t border-slate-100 dark:border-slate-800 pt-5">
             <h3 className="text-xs font-bold text-slate-900 dark:text-white font-sans flex items-center gap-1.5">
               <span>Video Encoder Profiles (H.264, VP9 etc)</span>
@@ -497,8 +745,36 @@ export default function TranscodeSettings({
                   ]}
                   className="w-full"
                 />
+                {availableHwAccel.length > 0 && (
+                  <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <label className="text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400 block mb-1.5">GPU Hardware Acceleration</label>
+                    <div className="flex gap-1.5 flex-wrap">
+                      <button onClick={() => setHardwareAccel("")}
+                        className={`text-[9px] px-2.5 py-1 rounded-lg font-medium transition-all cursor-pointer border ${
+                          !hardwareAccel
+                            ? "bg-slate-200 dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300"
+                            : "bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500 hover:border-slate-300"
+                        }`}>Software CPU</button>
+                      {availableHwAccel.map((vendor) => {
+                        const labels: Record<string, { label: string; badge: string }> = {
+                          nvidia: { label: "NVIDIA NVENC", badge: "bg-green-100 dark:bg-green-950/40 border-green-200 dark:border-green-900 text-green-700 dark:text-green-300" },
+                          amd: { label: "AMD AMF", badge: "bg-red-100 dark:bg-red-950/40 border-red-200 dark:border-red-900 text-red-700 dark:text-red-300" },
+                          intel: { label: "Intel QSV", badge: "bg-blue-100 dark:bg-blue-950/40 border-blue-200 dark:border-blue-900 text-blue-700 dark:text-blue-300" },
+                          apple: { label: "Apple VideoToolbox", badge: "bg-purple-100 dark:bg-purple-950/40 border-purple-200 dark:border-purple-900 text-purple-700 dark:text-purple-300" },
+                        };
+                        const info = labels[vendor] || { label: vendor, badge: "bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300" };
+                        return (
+                          <button key={vendor} onClick={() => setHardwareAccel(hardwareAccel === vendor ? "" : vendor)}
+                            className={`text-[9px] px-2.5 py-1 rounded-lg font-medium transition-all cursor-pointer border ${
+                              hardwareAccel === vendor ? info.badge : "bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500 hover:border-slate-300"
+                            }`}
+                          >{info.label}</button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
-
               <div className="space-y-1.5">
                 <label className="text-[10px] font-mono text-slate-400">Resize Resolution<TooltipIcon text="Downscale or upscale the video. Keeping original resolution avoids quality loss. Scaling up (e.g. 720p → 1080p) does not add real detail." /></label>
                 <CustomSelect
@@ -553,8 +829,14 @@ export default function TranscodeSettings({
                 />
               </div>
             </div>
+            <div className="pt-3">
+              <label className="text-[10px] font-mono text-slate-400">Webhook URL (POST on completion)</label>
+              <input type="url" value={webhookUrl} onChange={(e) => setWebhookUrl(e.target.value)} placeholder="https://example.com/webhook"
+                className="w-full mt-1 text-xs px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 text-slate-700 dark:text-slate-300 placeholder-slate-400"
+              />
+            </div>
           </div>
-        )}
+        </React.Fragment>}
 
         {/* AUDIO ENCODING PANEL */}
         <div id="audio-parameters-box" className="space-y-4 border-t border-slate-100 dark:border-slate-800 pt-5">
@@ -643,6 +925,16 @@ export default function TranscodeSettings({
             <Scissors className="h-3.5 w-3.5 text-indigo-500" />
             <span>Multi-Segment Trimming & Time-Clipped Remuxing</span>
           </h3>
+
+          {initialDuration && initialDuration > 0 && (
+            <WaveformEditor
+              duration={initialDuration}
+              trimStart={trimStart}
+              trimEnd={trimEnd}
+              onTrimChange={(s, e) => { setTrimStart(s); setTrimEnd(e); setTrimError(null); }}
+              thumbnails={thumbnails.length > 0 ? thumbnails : undefined}
+            />
+          )}
 
           {trimError && (
             <div id="trim-warning-box" className="bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-450 p-3 rounded-xl text-xs leading-relaxed flex items-start gap-2">
@@ -865,6 +1157,26 @@ export default function TranscodeSettings({
         </div>
       )}
 
+      {/* Toolbar: Recipe Manager + Creator Toolkit */}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => setShowRecipeManager(true)}
+          className="flex-1 flex items-center justify-center gap-1.5 text-[10px] px-3 py-2 bg-indigo-50 dark:bg-indigo-950/20 hover:bg-indigo-100 dark:hover:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900 text-indigo-700 dark:text-indigo-300 rounded-xl font-medium transition-all cursor-pointer"
+        >
+          <FlaskConical className="h-3.5 w-3.5" />
+          Batch Recipes
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowCreatorToolkit(true)}
+          className="flex-1 flex items-center justify-center gap-1.5 text-[10px] px-3 py-2 bg-amber-50 dark:bg-amber-950/20 hover:bg-amber-100 dark:hover:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-amber-700 dark:text-amber-300 rounded-xl font-medium transition-all cursor-pointer"
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          Creator Toolkit
+        </button>
+      </div>
+
       {/* Start Conversion Action trigger */}
       <div id="settings-action-panel" className="border-t border-slate-100 dark:border-slate-800 pt-5">
         <button
@@ -886,6 +1198,59 @@ export default function TranscodeSettings({
           )}
         </button>
       </div>
+
+      {/* Recipe Manager Modal */}
+      <Suspense fallback={null}>
+        <RecipeManager
+          open={showRecipeManager}
+          onClose={() => setShowRecipeManager(false)}
+          onApplyRecipe={(settings) => {
+            if (settings.outputFormat) setOutputFormat(settings.outputFormat);
+            if (settings.videoCodec) setVideoCodec(settings.videoCodec);
+            if (settings.videoResolution) setVideoResolution(settings.videoResolution);
+            if (settings.videoFps) setVideoFps(settings.videoFps);
+            if (settings.videoBitrate) setVideoBitrate(settings.videoBitrate);
+            if (settings.videoCrf) setVideoCrf(settings.videoCrf);
+            if (settings.audioCodec) setAudioCodec(settings.audioCodec);
+            if (settings.audioBitrate) setAudioBitrate(settings.audioBitrate);
+            if (settings.audioSampleRate) setAudioSampleRate(settings.audioSampleRate);
+            if (settings.audioChannels) setAudioChannels(settings.audioChannels);
+            if (settings.burnSubtitles !== undefined) setBurnSubtitles(settings.burnSubtitles);
+            if (settings.stripAudio !== undefined) setStripAudio(settings.stripAudio);
+            if (settings.hardwareAccel !== undefined) setHardwareAccel(settings.hardwareAccel);
+            if (settings.webhookUrl !== undefined) setWebhookUrl(settings.webhookUrl);
+          }}
+          currentSettings={{
+            outputFormat, audioBitrate, audioSampleRate, audioChannels,
+            videoResolution, videoFps, videoCodec, audioCodec, videoBitrate, videoCrf,
+            trimStart, trimEnd, burnSubtitles, stripAudio, selectedFormatId: "best",
+            hardwareAccel, webhookUrl,
+          }}
+        />
+      </Suspense>
+
+      {/* Creator Toolkit Modal */}
+      <Suspense fallback={null}>
+        <CreatorToolkit
+          open={showCreatorToolkit}
+          onClose={() => setShowCreatorToolkit(false)}
+          onApplyPreset={(settings) => {
+            if (settings.outputFormat) setOutputFormat(settings.outputFormat);
+            if (settings.videoCodec) setVideoCodec(settings.videoCodec);
+            if (settings.videoResolution) setVideoResolution(settings.videoResolution);
+            if (settings.videoFps) setVideoFps(settings.videoFps);
+            if (settings.videoBitrate) setVideoBitrate(settings.videoBitrate);
+            if (settings.videoCrf) setVideoCrf(settings.videoCrf);
+            if (settings.audioCodec) setAudioCodec(settings.audioCodec);
+            if (settings.audioBitrate) setAudioBitrate(settings.audioBitrate);
+            if (settings.audioSampleRate) setAudioSampleRate(settings.audioSampleRate);
+            if (settings.audioChannels) setAudioChannels(settings.audioChannels);
+            if (settings.burnSubtitles !== undefined) setBurnSubtitles(settings.burnSubtitles);
+            if (settings.stripAudio !== undefined) setStripAudio(settings.stripAudio);
+            if (settings.hardwareAccel !== undefined) setHardwareAccel(settings.hardwareAccel);
+          }}
+        />
+      </Suspense>
 
       {/* Quality Validation Warning Modal */}
       {validationWarnings && (

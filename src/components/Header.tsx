@@ -1,6 +1,7 @@
-import { Layers, Activity, ServerCrash, Sun, Moon, Info, HelpCircle, Wrench, Cookie, X, AlertTriangle } from "lucide-react";
-import { useState, useRef } from "react";
+import { Layers, Activity, ServerCrash, Sun, Moon, Info, HelpCircle, Wrench, Cookie, X, AlertTriangle, Key, Copy, Trash2, Check, ListOrdered } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import QueuePanel from "./QueuePanel";
 import { apiFetch } from "../api";
 
 interface HeaderProps {
@@ -13,9 +14,11 @@ interface HeaderProps {
   onToggleTheme: () => void;
   onOpenInfo?: () => void;
   onOpenFAQ?: () => void;
+  onOpenChangelog?: () => void;
+  hasNewVersion?: boolean;
 }
 
-export default function Header({ isServerOnline, serverInfo, theme, onToggleTheme, onOpenInfo, onOpenFAQ }: HeaderProps) {
+export default function Header({ isServerOnline, serverInfo, theme, onToggleTheme, onOpenInfo, onOpenFAQ, onOpenChangelog, hasNewVersion }: HeaderProps) {
   const logoClickCount = useRef(0);
   const [logoClicks, setLogoClicks] = useState(0);
   const [cookieModalOpen, setCookieModalOpen] = useState(false);
@@ -23,6 +26,38 @@ export default function Header({ isServerOnline, serverInfo, theme, onToggleThem
   const [cookieText, setCookieText] = useState("");
   const [adminKey, setAdminKey] = useState(localStorage.getItem("transmux_admin_key") || "");
   const [cookieStatus, setCookieStatus] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [apiKeyModalOpen, setApiKeyModalOpen] = useState(false);
+  const [apiKeys, setApiKeys] = useState<{ id: string; name: string; createdAt: string; preview: string }[]>([]);
+  const [copiedKey, setCopiedKey] = useState("");
+  const [newKey, setNewKey] = useState("");
+  const [queuePanelOpen, setQueuePanelOpen] = useState(false);
+
+  const fetchKeys = useCallback(async () => {
+    try {
+      const res = await apiFetch("/api/keys");
+      const d = await res.json();
+      if (d.success) setApiKeys(d.keys);
+    } catch {}
+  }, []);
+
+  useEffect(() => { if (apiKeyModalOpen) fetchKeys(); }, [apiKeyModalOpen, fetchKeys]);
+
+  const handleGenerateKey = async () => {
+    try {
+      const res = await apiFetch("/api/keys", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+      const d = await res.json();
+      if (d.success) {
+        setNewKey(d.key);
+        fetchKeys();
+      }
+    } catch {}
+  };
+  const handleDeleteKey = async (key: string) => {
+    try {
+      await apiFetch(`/api/keys/${encodeURIComponent(key)}`, { method: "DELETE" });
+      fetchKeys();
+    } catch {}
+  };
 
   useState(() => {
     apiFetch("/api/cookies").then(r => r.json()).then(d => {
@@ -109,6 +144,24 @@ export default function Header({ isServerOnline, serverInfo, theme, onToggleThem
               <span className="absolute -top-1 -right-1 w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
             )}
           </button>
+          {/* Queue Button */}
+          <button
+            onClick={() => setQueuePanelOpen(true)}
+            id="btn-queue"
+            className="p-1.5 sm:p-2 rounded-xl bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 border border-slate-200 dark:border-slate-705 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
+            title="Job Queue"
+          >
+            <ListOrdered className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          </button>
+          {/* API Key Button */}
+          <button
+            onClick={() => setApiKeyModalOpen(true)}
+            id="btn-api-keys"
+            className="p-1.5 sm:p-2 rounded-xl bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 border border-slate-200 dark:border-slate-705 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
+            title="API Keys"
+          >
+            <Key className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          </button>
           {/* Info Button */}
           {onOpenInfo && (
             <button
@@ -118,6 +171,20 @@ export default function Header({ isServerOnline, serverInfo, theme, onToggleThem
               title="About Transmux"
             >
               <Info className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </button>
+          )}
+          {/* Changelog Button */}
+          {onOpenChangelog && (
+            <button
+              onClick={onOpenChangelog}
+              id="btn-changelog"
+              className="p-1.5 sm:p-2 rounded-xl bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 border border-slate-200 dark:border-slate-705 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer relative"
+              title="What's New in v5.0"
+            >
+              <span className="text-sm">📋</span>
+              {hasNewVersion && (
+                <span className="absolute -top-1 -right-1 w-2 h-2 bg-indigo-500 rounded-full animate-pulse" />
+              )}
             </button>
           )}
           {/* FAQ Button */}
@@ -186,20 +253,26 @@ export default function Header({ isServerOnline, serverInfo, theme, onToggleThem
               <Cookie className="h-5 w-5 text-slate-600 dark:text-slate-300" />
               <h3 className="text-sm font-bold">YouTube Cookies</h3>
             </div>
-            <button
-              onClick={() => { setCookieModalOpen(false); setCookieStatus(null); }}
-              className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors text-slate-400 cursor-pointer"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              <span className="text-[9px] text-indigo-500 dark:text-indigo-400 hidden sm:inline">🔌 Extension recommended</span>
+              <button
+                onClick={() => { setCookieModalOpen(false); setCookieStatus(null); }}
+                className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors text-slate-400 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
           <div className="p-5 space-y-4">
             {hasCookies === false && (
               <div className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-lg px-3 py-2">
                 <AlertTriangle className="h-4 w-4 shrink-0" />
-                <span>Cookies not configured. YouTube downloads may fail and fall back through proxy.</span>
+                <span>Cookies not configured. Install the Transmux browser extension for auto-sync, or paste cookies manually below.</span>
               </div>
             )}
+            <div className="text-[10px] text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/10 border border-indigo-100 dark:border-indigo-900/40 rounded-lg px-3 py-2 leading-relaxed">
+              🔌 <strong>Extension users:</strong> The Transmux Cookie Relay extension auto-sends cookies when needed. No manual paste required. Your cookies are encrypted in transit and used <strong>only</strong> for your own conversions — never shared or logged.
+            </div>
             <div className="space-y-1.5">
               <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Admin Key</label>
               <input
@@ -243,6 +316,87 @@ export default function Header({ isServerOnline, serverInfo, theme, onToggleThem
         </motion.div>
       )}
     </AnimatePresence>
+
+    {/* API Key Management Modal */}
+    <AnimatePresence>
+      {apiKeyModalOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-md"
+          onClick={() => { setApiKeyModalOpen(false); setNewKey(""); }}
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.9, opacity: 0, y: 20 }}
+            transition={{ type: "spring", duration: 0.4, bounce: 0.3 }}
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl text-slate-900 dark:text-slate-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Key className="h-5 w-5 text-slate-600 dark:text-slate-300" />
+                <h3 className="text-sm font-bold">API Keys</h3>
+              </div>
+              <button onClick={() => { setApiKeyModalOpen(false); setNewKey(""); }}
+                className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors text-slate-400 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4 max-h-[60vh] overflow-y-auto">
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                API keys allow programmatic access to conversions via <code className="text-[9px] bg-slate-100 dark:bg-slate-800 px-1 rounded">X-API-Key</code> header.
+              </p>
+              {newKey && (
+                <div className="text-xs bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 rounded-lg p-3">
+                  <p className="font-bold text-emerald-700 dark:text-emerald-300 mb-1">New key generated — copy it now!</p>
+                  <div className="flex items-center gap-2">
+                    <code className="text-[10px] bg-white dark:bg-slate-950 px-2 py-1 rounded border border-emerald-200 dark:border-emerald-800 flex-1 truncate font-mono">{newKey}</code>
+                    <button onClick={() => { navigator.clipboard.writeText(newKey); setCopiedKey(newKey); setTimeout(() => setCopiedKey(""), 2000); }}
+                      className="p-1 hover:bg-emerald-100 dark:hover:bg-emerald-950 rounded cursor-pointer shrink-0"
+                    >
+                      {copiedKey === newKey ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5 text-emerald-600" />}
+                    </button>
+                  </div>
+                  <p className="text-[9px] text-emerald-600/80 dark:text-emerald-400/80 mt-1">This key will not be shown again.</p>
+                </div>
+              )}
+              <div className="space-y-2">
+                {apiKeys.length === 0 ? (
+                  <p className="text-xs text-slate-400 text-center py-4">No API keys yet.</p>
+                ) : (
+                  apiKeys.map((k, i) => (
+                    <div key={i} className="flex items-center justify-between text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2">
+                      <div>
+                        <p className="font-medium text-slate-700 dark:text-slate-300">{k.name}</p>
+                        <p className="text-[10px] text-slate-400">{k.preview}</p>
+                      </div>
+                      <button onClick={() => handleDeleteKey(k.id)}
+                        className="p-1 hover:bg-rose-100 dark:hover:bg-rose-950/30 rounded cursor-pointer text-slate-400 hover:text-rose-600"
+                        title="Delete key"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+              <button onClick={handleGenerateKey}
+                className="w-full text-xs font-bold py-2.5 rounded-lg bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-950 hover:bg-slate-800 dark:hover:bg-slate-200 transition-colors cursor-pointer"
+              >
+                Generate New Key
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+
+    <QueuePanel open={queuePanelOpen} onClose={() => setQueuePanelOpen(false)} />
     </>
   );
 }

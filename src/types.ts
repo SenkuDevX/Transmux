@@ -43,6 +43,8 @@ export interface ConversionSettings {
   thumbnailUrl?: string; // cover art URL to embed in audio
   mediaTitle?: string; // original media title for metadata tags
   mediaUploader?: string; // uploader/channel name for artist metadata
+  hardwareAccel?: string; // 'nvidia', 'amd', 'intel', 'apple', '' for none
+  webhookUrl?: string; // URL to notify on conversion completion
 }
 
 export interface Job {
@@ -73,4 +75,51 @@ export interface ConversionHistoryItem {
   completedAt: string;
   size: number;
   bitrate?: string;
+}
+
+// Batch Automation Recipe
+export interface ConversionRecipe {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  settings: Partial<ConversionSettings>;
+  createdAt: string;
+}
+
+// Creator Toolkit Platform Presets
+export interface CreatorPreset {
+  id: string;
+  platform: string;
+  category: 'video' | 'audio' | 'gif';
+  name: string;
+  description: string;
+  badge: string;
+  settings: Partial<ConversionSettings>;
+}
+
+// Waveform data for timeline editor
+export interface WaveformData {
+  peaks: number[];       // normalized -1 to 1
+  sampleRate: number;
+  channels: number;
+  duration: number;       // seconds
+  totalSamples: number;
+}
+
+// Quality comparison data
+export interface QualityComparison {
+  inputName: string;
+  inputSize: number;
+  inputResolution: string;
+  inputCodec: string;
+  inputBitrate: string;
+  outputName: string;
+  outputSize: number;
+  outputResolution: string;
+  outputCodec: string;
+  outputBitrate: string;
+  compressionRatio: number;
+  sizeSaved: number;
+  sizeSavedPercent: number;
 }

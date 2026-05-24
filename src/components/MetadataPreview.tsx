@@ -70,6 +70,52 @@ export function formatSize(bytes: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 }
 
+// Smart Format Recommendation Engine
+function getFormatRecommendations(fmt: MediaFormat | null): { label: string; emoji: string; badge: string }[] {
+  const recs: { label: string; emoji: string; badge: string }[] = [];
+  if (!fmt) {
+    // Legend items
+    recs.push({ label: "Best for Discord", emoji: "💬", badge: "bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-900/40" });
+    recs.push({ label: "Best for WhatsApp", emoji: "📱", badge: "bg-green-100 dark:bg-green-950/40 text-green-700 dark:text-green-300 border-green-200 dark:border-green-900/40" });
+    recs.push({ label: "Best for YouTube", emoji: "▶️", badge: "bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-300 border-red-200 dark:border-red-900/40" });
+    recs.push({ label: "Best Quality", emoji: "🏆", badge: "bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-900/40" });
+    return recs;
+  }
+
+  const hasVideo = fmt.videoCodec !== "none";
+  const res = fmt.resolution || "";
+  const ext = fmt.extension?.toLowerCase() || "";
+  const size = fmt.filesize || 0;
+  const resNum = parseInt(res.match(/(\d+)/)?.[1] || "0");
+
+  // Discord: max 25MB, MP4, preferably 720p or lower, H.264
+  if (hasVideo && ext === "mp4" && resNum <= 720 && (size === 0 || size < 25 * 1024 * 1024)) {
+    recs.push({ label: "Discord", emoji: "💬", badge: "bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-900/40" });
+  }
+
+  // WhatsApp: max 16MB, MP4, preferably 480p
+  if (hasVideo && ext === "mp4" && resNum <= 480 && (size === 0 || size < 16 * 1024 * 1024)) {
+    recs.push({ label: "WhatsApp", emoji: "📱", badge: "bg-green-100 dark:bg-green-950/40 text-green-700 dark:text-green-300 border-green-200 dark:border-green-900/40" });
+  }
+
+  // YouTube upload: MP4 or WebM, high res, H.264/VP9
+  if (hasVideo && (ext === "mp4" || ext === "webm") && resNum >= 1080) {
+    recs.push({ label: "YouTube", emoji: "▶️", badge: "bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-300 border-red-200 dark:border-red-900/40" });
+  }
+
+  // Best quality: highest resolution, good codec
+  if (hasVideo && resNum >= 2160 && size > 0) {
+    recs.push({ label: "Best Quality", emoji: "🏆", badge: "bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-900/40" });
+  }
+
+  // Small file: good for editing, low res
+  if (hasVideo && resNum <= 480 && (size > 0 && size < 50 * 1024 * 1024)) {
+    recs.push({ label: "Editing", emoji: "✂️", badge: "bg-purple-100 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-900/40" });
+  }
+
+  return recs;
+}
+
 export default function MetadataPreview({ metadata, selectedFormatId, onFormatSelected }: MetadataPreviewProps) {
   const [showAllFormats, setShowAllFormats] = useState(false);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -200,12 +246,21 @@ export default function MetadataPreview({ metadata, selectedFormatId, onFormatSe
               <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 font-mono">Resolves to maximum visual quality</p>
             </div>
 
+            {/* Smart Recommendations Legend */}
+            <div className="col-span-full flex flex-wrap gap-1.5 text-[9px] text-slate-500 dark:text-slate-400 pb-1">
+              <span className="font-bold text-slate-600 dark:text-slate-300">🏷️ Format Recommendations:</span>
+              {getFormatRecommendations(null).map((r, i) => (
+                <span key={i} className={`px-1.5 py-0.5 rounded border font-medium ${r.badge}`}>{r.label}</span>
+              ))}
+            </div>
+
             {/* List dynamically loaded formats from yt-dlp */}
             {itemsToDisplay.map((fmt) => {
               const isSelected = selectedFormatId === fmt.formatId;
               const hasVideo = fmt.videoCodec !== "none";
               const label = hasVideo ? `${fmt.resolution} (${fmt.extension.toUpperCase()})` : `Audio Stream (${fmt.extension.toUpperCase()})`;
               const codecInfo = hasVideo ? `Video: ${fmt.videoCodec}` : `Audio: ${fmt.audioCodec}`;
+              const recs = getFormatRecommendations(fmt);
 
               return (
                 <div
@@ -241,6 +296,13 @@ export default function MetadataPreview({ metadata, selectedFormatId, onFormatSe
                       {fmt.filesize > 0 ? formatSize(fmt.filesize) : (fmt.note || "unspecified")}
                     </span>
                   </div>
+                  {recs.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {recs.slice(0, 2).map((r, i) => (
+                        <span key={i} className={`text-[8px] font-bold px-1 py-0.5 rounded ${r.badge}`}>{r.emoji} {r.label}</span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}

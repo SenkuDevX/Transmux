@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { ListMusic, Download, Loader2, Music, Film, Check, AlertCircle } from "lucide-react";
+import React, { useState } from "react";
+import { ListMusic, Download, Loader2, Music, Film, Check, AlertCircle, GripVertical } from "lucide-react";
 import { apiFetch } from "../api";
 import CustomSelect from "./CustomSelect";
 
@@ -31,13 +31,28 @@ export default function PlaylistView({ playlist, onReset }: PlaylistViewProps) {
   const [audioOnly, setAudioOnly] = useState(false);
   const [formatSelections, setFormatSelections] = useState<Record<number, string>>({});
   const [outputFormat, setOutputFormat] = useState("mp4");
+  const [entries, setEntries] = useState(playlist.entries);
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+
+  const handleDragStart = (idx: number) => setDragIdx(idx);
+
+  const handleDragOver = (e: React.DragEvent) => e.preventDefault();
+
+  const handleDrop = (idx: number) => {
+    if (dragIdx === null || dragIdx === idx) return;
+    const reordered = [...entries];
+    const [moved] = reordered.splice(dragIdx, 1);
+    reordered.splice(idx, 0, moved);
+    setEntries(reordered);
+    setDragIdx(null);
+  };
 
   const handleConvertAll = async () => {
     setConverting(true);
-    setProgress(`Starting conversion of ${playlist.count} items...`);
+    setProgress(`Starting conversion of ${entries.length} items...`);
 
     try {
-      const entries = playlist.entries.map((e) => ({
+      const payload = entries.map((e) => ({
         ...e,
         formatId: formatSelections[e.index] || "best",
       }));
@@ -46,7 +61,7 @@ export default function PlaylistView({ playlist, onReset }: PlaylistViewProps) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          entries,
+          entries: payload,
           outputFormat,
           audioOnly,
         }),
@@ -78,7 +93,7 @@ export default function PlaylistView({ playlist, onReset }: PlaylistViewProps) {
           <div className="flex items-center gap-2">
             <ListMusic className="h-5 w-5 text-indigo-500" />
             <h3 className="font-bold text-slate-900 dark:text-white">{playlist.title}</h3>
-            <span className="text-xs text-slate-400">({playlist.count} items)</span>
+            <span className="text-xs text-slate-400">({entries.length} items)</span>
           </div>
           <button onClick={onReset} className="text-xs text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
             Clear
@@ -98,17 +113,28 @@ export default function PlaylistView({ playlist, onReset }: PlaylistViewProps) {
             ]}
             className="w-28"
           />
-
           <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
             <input type="checkbox" checked={audioOnly} onChange={(e) => setAudioOnly(e.target.checked)} />
             Audio only
           </label>
         </div>
 
-        <div className="space-y-1 max-h-60 overflow-y-auto mb-4">
-          {playlist.entries.map((entry) => (
-            <div key={entry.index} className="flex items-center gap-2 py-1.5 px-2 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-lg">
-              <span className="text-[10px] text-slate-400 font-mono w-6">{entry.index + 1}.</span>
+        <div className="space-y-0.5 max-h-60 overflow-y-auto mb-4">
+          {entries.map((entry, idx) => (
+            <div
+              key={entry.index}
+              draggable
+              onDragStart={() => handleDragStart(idx)}
+              onDragOver={handleDragOver}
+              onDrop={() => handleDrop(idx)}
+              className={`flex items-center gap-2 py-1.5 px-2 rounded-lg transition-colors ${
+                dragIdx === idx ? "opacity-50 bg-slate-100 dark:bg-slate-800" : "hover:bg-slate-50 dark:hover:bg-slate-800/50"
+              }`}
+            >
+              <div className="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500 dark:text-slate-600 dark:hover:text-slate-400">
+                <GripVertical className="h-3.5 w-3.5" />
+              </div>
+              <span className="text-[10px] text-slate-400 font-mono w-5">{idx + 1}.</span>
               <span className="text-xs text-slate-700 dark:text-slate-300 flex-1 truncate">{entry.title}</span>
               <span className="text-[10px] text-slate-400 font-mono">{formatDuration(entry.duration)}</span>
               <CustomSelect
@@ -132,7 +158,7 @@ export default function PlaylistView({ playlist, onReset }: PlaylistViewProps) {
             className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer"
           >
             <Download className="h-3.5 w-3.5" />
-            Download ZIP ({playlist.count} items)
+            Download ZIP ({entries.length} items)
           </a>
         ) : (
           <button
@@ -143,7 +169,7 @@ export default function PlaylistView({ playlist, onReset }: PlaylistViewProps) {
             {converting ? (
               <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Converting...</>
             ) : (
-              <><Download className="h-3.5 w-3.5" /> Convert All ({playlist.count})</>
+              <><Download className="h-3.5 w-3.5" /> Convert All ({entries.length})</>
             )}
           </button>
         )}
