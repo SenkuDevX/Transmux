@@ -1640,7 +1640,7 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
     const containerAudioCodecs: Record<string, string[]> = {
       mp3: ["libmp3lame"],
       ogg: ["libvorbis", "opus", "flac"],
-      opus: ["libopus"],
+      opus: ["libopus", "opus"],
       flac: ["flac"],
       wav: ["pcm_s16le", "pcm_s24le", "pcm_f32le"],
       m4a: ["aac", "alac"],
@@ -1661,6 +1661,8 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
         else if (outputExt === "wav") aCodec = "pcm_s16le";
         else if (outputExt === "aac" || outputExt === "m4a") aCodec = "aac";
       }
+      // Map user-facing codec names to FFmpeg encoder names
+      if (aCodec === "opus") aCodec = "libopus";
     } else {
       // Video outputs — validate and fix incompatible codec-container combos
       if (!vCodec || vCodec === "keep") {
