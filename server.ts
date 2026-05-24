@@ -1042,6 +1042,17 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
           "--no-playlist",
           url,
         ];
+        // Android/fallback download args: use DEFAULT_FORMAT because android format IDs differ
+        const androidDownloadArgs = [
+          "-f", DEFAULT_FORMAT,
+          "--concurrent-fragments", "16",
+          ...(HAS_ARIA2 ? ["--downloader", "aria2c", "--downloader-args", "aria2c:-x16 -s16 -k1M"] : []),
+          "-o", path.join(jobDir, "input.%(ext)s"),
+          "--write-thumbnail",
+          "--convert-thumbnails", "jpg",
+          "--no-playlist",
+          url,
+        ];
 
         const dlCookieArgs = ["--extractor-args", DL_EXTRACTOR];
         const dlNoCookieArgs = ["--extractor-args", DL_EXTRACTOR_NO_COOKIES];
@@ -1083,16 +1094,20 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
           });
         }
 
-        // Try: with cookies + impersonation → without cookies → through proxy if configured
+        // Try: cookies + impersonation → if bot error, trigger cookie refresh immediately
+        // (Android/proxy fallback is a desperate last resort after 5 retries exhausted)
         const downloadAttempts: string[][] = [
           addCookiesArg([...YTDLP_BASE, ...dlCookieArgs, ...baseDownloadArgs], job.id),
         ];
 
-        if (fs.existsSync(COOKIES_FILE)) {
-          downloadAttempts.push([...YTDLP_BASE, ...dlNoCookieArgs, ...baseDownloadArgs]);
-        }
-        if (PROXY_URL) {
-          downloadAttempts.push([...YTDLP_BASE, ...dlNoCookieArgs, ...baseDownloadArgs, "--proxy", PROXY_URL]);
+        // After 5 cookie retries exhausted, try android/proxy as final fallback
+        if (job.cookieRetryCount >= 5) {
+          if (fs.existsSync(COOKIES_FILE)) {
+            downloadAttempts.push([...YTDLP_BASE, ...dlNoCookieArgs, ...androidDownloadArgs]);
+          }
+          if (PROXY_URL) {
+            downloadAttempts.push([...YTDLP_BASE, ...dlNoCookieArgs, ...androidDownloadArgs, "--proxy", PROXY_URL]);
+          }
         }
 
         let lastError: Error | null = null;
@@ -1161,11 +1176,14 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
           const subAttempts: string[][] = [
             addCookiesArg([...YTDLP_BASE, ...subDlCookieArgs, ...subDlBase], job.id),
           ];
-          if (fs.existsSync(COOKIES_FILE)) {
-            subAttempts.push([...YTDLP_BASE, ...subDlNoCookieArgs, ...subDlBase]);
-          }
-          if (PROXY_URL) {
-            subAttempts.push([...YTDLP_BASE, ...subDlNoCookieArgs, ...subDlBase, "--proxy", PROXY_URL]);
+          // Android/proxy fallback only as desperate last resort after 5 cookie retries
+          if (job.cookieRetryCount >= 5) {
+            if (fs.existsSync(COOKIES_FILE)) {
+              subAttempts.push([...YTDLP_BASE, ...subDlNoCookieArgs, ...subDlBase]);
+            }
+            if (PROXY_URL) {
+              subAttempts.push([...YTDLP_BASE, ...subDlNoCookieArgs, ...subDlBase, "--proxy", PROXY_URL]);
+            }
           }
           job.progress = 43;
           let subLastError: string | null = null;
