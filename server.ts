@@ -1829,7 +1829,9 @@ app.get("/api/download/:id", async (req, res) => {
   const deliveryName = customName ? path.basename(customName) : (job.outputName || `transmux_${job.id}`);
 
   res.download(filePath, deliveryName, (err) => {
-    if (err) console.error(`Failed to push file downstream to request: ${err}`);
+    if (err && !res.destroyed) {
+      console.warn(`[Download] Client disconnected during download: ${err.message?.slice(0, 100)}`);
+    }
   });
 });
 
@@ -2053,6 +2055,11 @@ function serveFileWithRanges(req: any, res: any, filePath: string) {
 
     const chunksize = (end - start) + 1;
     const file = fs.createReadStream(filePath, { start, end });
+    file.on("error", () => {});
+    req.on("close", () => {
+      file.destroy();
+      try { res.end(); } catch {}
+    });
     const head = {
       "Content-Range": `bytes ${start}-${end}/${fileSize}`,
       "Accept-Ranges": "bytes",
@@ -2068,7 +2075,13 @@ function serveFileWithRanges(req: any, res: any, filePath: string) {
       "Content-Type": getMimeType(filePath),
     };
     res.writeHead(200, head);
-    fs.createReadStream(filePath).pipe(res);
+    const file = fs.createReadStream(filePath);
+    file.on("error", () => {});
+    req.on("close", () => {
+      file.destroy();
+      try { res.end(); } catch {}
+    });
+    file.pipe(res);
   }
 }
 
