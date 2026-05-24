@@ -1828,9 +1828,21 @@ app.get("/api/download/:id", async (req, res) => {
   const customName = req.query.filename as string;
   const deliveryName = customName ? path.basename(customName) : (job.outputName || `transmux_${job.id}`);
 
-  res.download(filePath, deliveryName, (err) => {
-    if (err && !res.destroyed) {
-      console.warn(`[Download] Client disconnected during download: ${err.message?.slice(0, 100)}`);
+  const file = fs.createReadStream(filePath);
+  res.setHeader('Content-Disposition', `attachment; filename="${deliveryName}"`);
+  res.setHeader('Content-Type', getMimeType(filePath));
+  res.status(200);
+  
+  // Clean up when client disconnects
+  req.on('close', () => file.destroy());
+  res.on('close', () => file.destroy());
+  
+  file.pipe(res);
+  file.on('error', (err: any) => {
+    if (err.code === 'ECONNRESET') {
+      console.log(`[Download] Client disconnected during file send for ${job.id}`);
+    } else {
+      console.error(`[Download] Error serving file ${job.id}:`, err.message);
     }
   });
 });
@@ -2055,11 +2067,6 @@ function serveFileWithRanges(req: any, res: any, filePath: string) {
 
     const chunksize = (end - start) + 1;
     const file = fs.createReadStream(filePath, { start, end });
-    file.on("error", () => {});
-    req.on("close", () => {
-      file.destroy();
-      try { res.end(); } catch {}
-    });
     const head = {
       "Content-Range": `bytes ${start}-${end}/${fileSize}`,
       "Accept-Ranges": "bytes",
@@ -2069,6 +2076,9 @@ function serveFileWithRanges(req: any, res: any, filePath: string) {
 
     res.writeHead(206, head);
     file.pipe(res);
+    // Clean up when client disconnects or response closes
+    req.on('close', () => file.destroy());
+    res.on('close', () => file.destroy());
   } else {
     const head = {
       "Content-Length": fileSize,
@@ -2076,12 +2086,10 @@ function serveFileWithRanges(req: any, res: any, filePath: string) {
     };
     res.writeHead(200, head);
     const file = fs.createReadStream(filePath);
-    file.on("error", () => {});
-    req.on("close", () => {
-      file.destroy();
-      try { res.end(); } catch {}
-    });
     file.pipe(res);
+    // Clean up when client disconnects or response closes
+    req.on('close', () => file.destroy());
+    res.on('close', () => file.destroy());
   }
 }
 
