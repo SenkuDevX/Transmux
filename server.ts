@@ -1828,21 +1828,12 @@ app.get("/api/download/:id", async (req, res) => {
   const customName = req.query.filename as string;
   const deliveryName = customName ? path.basename(customName) : (job.outputName || `transmux_${job.id}`);
 
-  const file = fs.createReadStream(filePath);
-  res.setHeader('Content-Disposition', `attachment; filename="${deliveryName}"`);
-  res.setHeader('Content-Type', getMimeType(filePath));
-  res.status(200);
-  
-  // Clean up when client disconnects
-  req.on('close', () => file.destroy());
-  res.on('close', () => file.destroy());
-  
-  file.pipe(res);
-  file.on('error', (err: any) => {
-    if (err.code === 'ECONNRESET') {
-      console.log(`[Download] Client disconnected during file send for ${job.id}`);
-    } else {
-      console.error(`[Download] Error serving file ${job.id}:`, err.message);
+  res.download(filePath, deliveryName, (err) => {
+    if (err) {
+      const msg = (err as any).message || "";
+      // Ignore client disconnect — not an actual server error
+      if (msg.includes("aborted") || msg.includes("ECONNRESET") || msg.includes("Request aborted")) return;
+      console.error(`Failed to push file downstream to request: ${err}`);
     }
   });
 });
@@ -2076,20 +2067,13 @@ function serveFileWithRanges(req: any, res: any, filePath: string) {
 
     res.writeHead(206, head);
     file.pipe(res);
-    // Clean up when client disconnects or response closes
-    req.on('close', () => file.destroy());
-    res.on('close', () => file.destroy());
   } else {
     const head = {
       "Content-Length": fileSize,
       "Content-Type": getMimeType(filePath),
     };
     res.writeHead(200, head);
-    const file = fs.createReadStream(filePath);
-    file.pipe(res);
-    // Clean up when client disconnects or response closes
-    req.on('close', () => file.destroy());
-    res.on('close', () => file.destroy());
+    fs.createReadStream(filePath).pipe(res);
   }
 }
 
