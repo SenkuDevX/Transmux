@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { RefreshCw, Terminal, CheckCircle, AlertTriangle } from "lucide-react";
 import { apiFetch } from "../api";
@@ -14,18 +14,31 @@ export default function CookieRefreshModal({ jobId, backendUrl, onDismiss, onCan
   const [mode, setMode] = useState<"trying-extension" | "manual" | "sending" | "success">("trying-extension");
   const [cookiesText, setCookiesText] = useState("");
   const [error, setError] = useState("");
+  const retryCountRef = useRef(0);
 
-  // Auto-try extension on mount
-  useEffect(() => {
+  const tryExtension = useCallback(() => {
+    retryCountRef.current++;
+    setMode("trying-extension");
+    setError("");
     window.postMessage(
       { type: "TRANSMUX_REFRESH_COOKIES", backendUrl, jobId },
       "*"
     );
+  }, [backendUrl, jobId]);
+
+  // Auto-try extension on mount
+  useEffect(() => {
+    tryExtension();
 
     const timer = setTimeout(() => {
-      setMode("manual");
-      setError("Extension did not respond. Paste cookies manually.");
-    }, 8000);
+      if (retryCountRef.current < 3) {
+        console.log(`[CookieRefresh] Extension retry ${retryCountRef.current}/3...`);
+        tryExtension();
+      } else {
+        setMode("manual");
+        setError("Extension did not respond after 3 attempts. Paste cookies manually.");
+      }
+    }, 12000);
 
     const handler = (event: MessageEvent) => {
       if (event.data?.type === "TRANSMUX_COOKIES_RESULT") {
@@ -34,8 +47,13 @@ export default function CookieRefreshModal({ jobId, backendUrl, onDismiss, onCan
           setMode("success");
           setTimeout(onDismiss, 2000);
         } else {
-          setMode("manual");
-          setError(event.data.error || "Extension failed to send cookies");
+          if (retryCountRef.current < 3) {
+            console.log(`[CookieRefresh] Extension failed, retry ${retryCountRef.current}/3...`);
+            setTimeout(tryExtension, 2000);
+          } else {
+            setMode("manual");
+            setError(event.data.error || "Extension failed after 3 attempts");
+          }
         }
       }
     };

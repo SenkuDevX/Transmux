@@ -96,14 +96,23 @@ export default function App() {
     }
   }, []);
 
-  // Socket.IO connection
+  // Socket.IO connection — listen for real-time job updates
   useEffect(() => {
-    let socket: any = null;
+    let s: any = null;
     try {
-      import("./lib/socket").then(mod => { socket = mod.connectSocket(); });
+      import("./lib/socket").then(mod => {
+        s = mod.connectSocket();
+        if (s) {
+          s.on("jobUpdate", (data: any) => {
+            if (data.jobId === activeJob?.id && data.status === "waiting_cookies") {
+              setCookieRefreshJobId(data.jobId);
+            }
+          });
+        }
+      });
     } catch {}
-    return () => { try { socket?.disconnect(); } catch {} };
-  }, []);
+    return () => { try { s?.disconnect(); } catch {} };
+  }, [activeJob?.id]);
 
   // Toggle theme utility
   const toggleTheme = () => {

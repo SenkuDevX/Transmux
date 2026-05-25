@@ -1141,7 +1141,7 @@ app.post("/api/cookies/:jobId", async (req, res) => {
         }
         if (metaResult.code === 0) {
           const data = JSON.parse(metaResult.stdout);
-          const formats = (data.formals || [])
+          const formats = (data.formats || [])
             .filter((f: any) => f.url || f.manifest_url)
             .map((f: any) => ({
               formatId: f.format_id,
@@ -1357,6 +1357,7 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
           job.status = "waiting_cookies";
           job.waitingCookies = true;
           job.error = "YouTube requires authentication. Please refresh cookies.";
+          emitJobUpdate(job.id, { status: "waiting_cookies", waitingCookies: true, error: job.error });
           return; // Exit gracefully — frontend will trigger cookie refresh
         }
 
@@ -1386,7 +1387,6 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
             if (reqHeight > 0 && dlMeta.height < reqHeight * 0.8) {
               console.log(`[Job ${job.id}] Quality mismatch: got ${dlMeta.height}p, expected ~${reqHeight}p. Retrying with resolution-based format...`);
               job.inputName = `Re-downloading with better format...`;
-              // Redownload with resolution-based fallback
               const betterFormat = `bestvideo[height<=${reqHeight}]+bestaudio/best[height<=${reqHeight}]`;
               const reArgs = [
                 "-f", betterFormat,
@@ -1400,7 +1400,6 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
                 "--extractor-args", DL_EXTRACTOR,
                 url,
               ];
-              // Try with cookies + resolution format
               const reAttempts: string[][] = [
                 addCookiesArg([...YTDLP_BASE, ...reArgs], job.id),
               ];
@@ -1413,7 +1412,6 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
                 } catch (e) {}
               }
               if (reSuccess) {
-                // Re-find downloaded file
                 const reFiles = fs.readdirSync(jobDir);
                 const reDl = reFiles.find(f => f.startsWith("input.") && !/\.(jpg|jpeg|png|webp)$/i.test(f));
                 if (reDl) {
@@ -1421,7 +1419,23 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
                   job.inputSize = fs.statSync(job.inputPath).size;
                   const newMeta = await probeMetadata(job.inputPath);
                   console.log(`[Job ${job.id}] Re-downloaded: ${newMeta.height ? newMeta.height + 'p' : 'unknown'}`);
+                  // Check again
+                  if (newMeta.height && newMeta.height < reqHeight * 0.8) {
+                    console.log(`[Job ${job.id}] Still low quality after re-download. Requesting fresh cookies from extension...`);
+                    job.status = "waiting_cookies";
+                    job.waitingCookies = true;
+                    job.error = "Download stuck at low quality. Please refresh cookies via extension.";
+                    emitJobUpdate(job.id, { status: "waiting_cookies", waitingCookies: true, error: job.error });
+                    return;
+                  }
                 }
+              } else {
+                console.log(`[Job ${job.id}] Re-download failed. Requesting fresh cookies from extension...`);
+                job.status = "waiting_cookies";
+                job.waitingCookies = true;
+                job.error = "Download failed with current cookies. Please refresh via extension.";
+                emitJobUpdate(job.id, { status: "waiting_cookies", waitingCookies: true, error: job.error });
+                return;
               }
             }
           }
@@ -1485,6 +1499,7 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
             job.status = "waiting_cookies";
             job.waitingCookies = true;
             job.error = "Subtitle download needs fresh YouTube cookies. Please refresh.";
+            emitJobUpdate(job.id, { status: "waiting_cookies", waitingCookies: true, error: job.error });
             return;
           }
 

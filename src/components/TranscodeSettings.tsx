@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Suspense } from "react";
-import { Sliders, Video, Music, Scissors, VolumeX, RefreshCw, AlertTriangle, HelpCircle, FlaskConical, Sparkles, Settings2 } from "lucide-react";
+import { Sliders, Video, Music, Scissors, VolumeX, RefreshCw, AlertTriangle, HelpCircle, FlaskConical, Sparkles, Settings2, Languages } from "lucide-react";
 import { ConversionSettings } from "../types";
 import CustomSelect from "./CustomSelect";
 import WaveformEditor from "./WaveformEditor";
@@ -1175,6 +1175,33 @@ export default function TranscodeSettings({
           <Sparkles className="h-3.5 w-3.5" />
           Creator Toolkit
         </button>
+      </div>
+
+      {/* Post-Processing Tools info cards */}
+      <div className="border-t border-slate-100 dark:border-slate-800 pt-4 mt-1">
+        <p className="text-[9px] font-semibold text-slate-500 dark:text-slate-500 mb-2 tracking-wider uppercase flex items-center gap-1.5">
+          <Settings2 className="h-3 w-3" /> Post-Processing Tools
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-2.5">
+            <div className="flex items-center gap-1.5 mb-1">
+              <Languages className="h-3 w-3 text-teal-500" />
+              <span className="text-[9px] font-bold text-slate-700 dark:text-slate-300">Subtitle Tools</span>
+            </div>
+            <p className="text-[7px] text-slate-400 dark:text-slate-500 leading-relaxed">
+              Download, translate, burn, or convert subtitles after conversion. Supports SRT, VTT, ASS, and auto-generated captions.
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-2.5">
+            <div className="flex items-center gap-1.5 mb-1">
+              <Video className="h-3 w-3 text-rose-500" />
+              <span className="text-[9px] font-bold text-slate-700 dark:text-slate-300">Creator Tools</span>
+            </div>
+            <p className="text-[7px] text-slate-400 dark:text-slate-500 leading-relaxed">
+              Extract thumbnails, create clips, grab audio snippets, and more from your completed file.
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Start Conversion Action trigger */}
