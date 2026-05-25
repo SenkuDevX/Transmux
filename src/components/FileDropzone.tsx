@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { UploadCloud, FileVideo, FileAudio, CheckCircle2, AlertTriangle, Disc } from "lucide-react";
 import { apiUrl } from "../api";
 
@@ -13,6 +13,15 @@ export default function FileDropzone({ onUploadSuccess, onUploadReset, activeUpl
   const [uploadPercent, setUploadPercent] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const xhrRef = useRef<XMLHttpRequest | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (xhrRef.current) {
+        xhrRef.current.abort();
+      }
+    };
+  }, []);
 
   const allowedFormatsText = "MP3, WAV, OGG, AAC, FLAC, M4A, MP4, MKV, WEBM, MOV, AVI, SRT, VTT, PNG, JPG, WEBP";
 
@@ -81,6 +90,7 @@ export default function FileDropzone({ onUploadSuccess, onUploadReset, activeUpl
     formData.append("file", file);
 
     const xhr = new XMLHttpRequest();
+    xhrRef.current = xhr;
     xhr.open("POST", apiUrl("/api/upload"), true);
 
     xhr.upload.onprogress = (event) => {

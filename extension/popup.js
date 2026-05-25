@@ -5,6 +5,11 @@ const YOUTUBE_DOMAINS = [".youtube.com", "www.youtube.com", "m.youtube.com", "mu
 
 function $(id) { return document.getElementById(id); }
 
+let dashboardInterval;
+let healthCache = { ok: null, timestamp: 0 };
+const HEALTH_CACHE_TTL = 30000;
+let pendingClipboardUrl = null;
+
 // ─── Logging ───
 
 function log(msg, type = "info") {
@@ -40,30 +45,29 @@ async function countCookies() {
 
 async function sendCurrentCookies() {
   log("Sending cookies to Transmux...");
-  try {
-    const backends = [BACKEND_DEFAULT];
-    for (const backend of backends) {
-      try {
-        const cookiesTxt = await extractCookiesTxt();
-        const res = await fetch(`${backend}/api/cookies/pending`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ cookies: cookiesTxt }),
-        });
-        const data = await res.json();
-        if (data.success) {
-          logSuccess(`Cookies sent! (${backend})`);
-          chrome.storage.local.set({ lastSent: Date.now(), lastSentStr: new Date().toLocaleString() });
-          return true;
-        }
-      } catch {}
-    }
-    logError("Could not reach Transmux backend");
-    return false;
-  } catch (e) {
-    logError(`Failed: ${e.message}`);
-    return false;
+  const backends = [BACKEND_DEFAULT];
+  let success = false;
+  for (const backend of backends) {
+    try {
+      const cookiesTxt = await extractCookiesTxt();
+      const res = await fetch(`${backend}/api/cookies/pending`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cookies: cookiesTxt }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        logSuccess(`Cookies sent! (${backend})`);
+        chrome.storage.local.set({ lastSent: Date.now(), lastSentStr: new Date().toLocaleString() });
+        success = true;
+        break;
+      }
+    } catch {}
   }
+  if (!success) {
+    logError("Could not reach Transmux backend");
+  }
+  return success;
 }
 
 async function extractCookiesTxt() {
@@ -118,6 +122,10 @@ function detectSiteFromUrl(url) {
 
 async function detectMediaInTab(tabId) {
   try {
+    if (!chrome.scripting?.executeScript) {
+      log("Script injection not available (restricted page)", "warn");
+      return [];
+    }
     const results = await chrome.scripting.executeScript({
       target: { tabId },
       func: () => {
@@ -139,7 +147,10 @@ async function detectMediaInTab(tabId) {
       },
     });
     return results?.[0]?.result || [];
-  } catch { return []; }
+  } catch (e) {
+    logError(`Media detection failed: ${e.message}`);
+    return [];
+  }
 }
 
 // ─── URL to Queue ───
@@ -192,6 +203,7 @@ async function updateMediaDetection() {
 
   const mediaItems = await detectMediaInTab(tab.id);
   const container = $("media-content");
+  container.innerHTML = "";
 
   if (mediaItems.length === 0) {
     container.innerHTML = `
@@ -203,7 +215,6 @@ async function updateMediaDetection() {
     return;
   }
 
-  container.innerHTML = "";
   const seen = new Set();
   mediaItems.forEach((item, idx) => {
     if (seen.has(item.src)) return;
@@ -216,12 +227,16 @@ async function updateMediaDetection() {
     const duration = item.duration ? `${Math.floor(item.duration)}s` : "";
     const shortSrc = item.src.length > 50 ? item.src.slice(0, 50) + "..." : item.src;
 
-    // Thumbnail preview for video items
     let thumbnailHtml = "";
-    if (item.type === "video" && item.poster) {
-      thumbnailHtml = `<img src="${item.poster}" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:6px;margin-bottom:6px;background:#1e293b" onerror="this.style.display='none'" />`;
-    } else if (item.type === "video" && !item.poster) {
-      thumbnailHtml = `<div style="width:100%;aspect-ratio:16/9;border-radius:6px;margin-bottom:6px;background:linear-gradient(135deg,#1e293b,#334155);display:flex;align-items:center;justify-content:center;font-size:20px">🎬</div>`;
+    if (item.type === "video") {
+      thumbnailHtml = `<div class="thumb-wrap">`;
+      if (item.poster) {
+        thumbnailHtml += `<div class="thumb-skel">🎬</div>`;
+        thumbnailHtml += `<img src="${item.poster}" alt="" loading="lazy" onload="this.previousElementSibling.style.display='none'" onerror="this.style.display='none'" />`;
+      } else {
+        thumbnailHtml += `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:20px;background:linear-gradient(135deg,#1e293b,#334155);animation:pulse 2s infinite">🎬</div>`;
+      }
+      thumbnailHtml += `</div>`;
     }
 
     card.innerHTML = `
@@ -237,288 +252,203 @@ async function updateMediaDetection() {
 
     container.appendChild(card);
   });
-
-  // Attach event listeners
-  container.querySelectorAll(".media-convert").forEach(btn => {
-    btn.addEventListener("click", () => openTransmux(btn.dataset.src));
-  });
-  container.querySelectorAll(".media-mp3").forEach(btn => {
-    btn.addEventListener("click", () => openTransmux(btn.dataset.src, { outputFormat: "mp3" }));
-  });
-  container.querySelectorAll(".media-gif").forEach(btn => {
-    btn.addEventListener("click", () => openTransmux(btn.dataset.src, { outputFormat: "gif" }));
-  });
-  container.querySelectorAll(".media-copy").forEach(btn => {
-    btn.addEventListener("click", () => {
-      navigator.clipboard.writeText(btn.dataset.src).then(() => {
-        logSuccess("URL copied!");
-      }).catch(() => logError("Copy failed"));
-    });
-  });
 }
 
-// ─── Event Listeners ───
+// ─── Health Check with Cache ───
 
-// Quick Actions
-$("action-mp3").addEventListener("click", async () => {
-  const tab = await detectCurrentTab();
-  if (tab?.url) openTransmux(tab.url, { outputFormat: "mp3" });
-});
-$("action-mp4").addEventListener("click", async () => {
-  const tab = await detectCurrentTab();
-  if (tab?.url) openTransmux(tab.url, { outputFormat: "mp4" });
-});
-$("action-gif").addEventListener("click", async () => {
-  const tab = await detectCurrentTab();
-  if (tab?.url) openTransmux(tab.url, { outputFormat: "gif" });
-});
-$("action-clip").addEventListener("click", async () => {
-  const tab = await detectCurrentTab();
-  if (tab?.url) openTransmux(tab.url, { action: "clip" });
-});
-$("action-remux").addEventListener("click", async () => {
-  const tab = await detectCurrentTab();
-  if (tab?.url) openTransmux(tab.url, { outputFormat: "mp4", videoCodec: "copy", audioCodec: "copy" });
-});
-
-// Cookie buttons
-$("refresh-cookies").addEventListener("click", async () => {
-  const btn = $("refresh-cookies");
-  btn.disabled = true;
-  btn.textContent = "🔄 Sending...";
-  await sendCurrentCookies();
-  await updateCookieUI();
-  btn.disabled = false;
-  btn.textContent = "🔄 Refresh Now";
-});
-
-$("test-cookies").addEventListener("click", async () => {
-  const btn = $("test-cookies");
-  btn.disabled = true;
-  btn.textContent = "🔍 Checking...";
-  const count = await countCookies();
-  if (count > 0) {
-    logSuccess(`Found ${count} YouTube cookies ✓`);
-    chrome.storage.local.get("lastSentStr", (r) => {
-      log(`Last sent: ${r.lastSentStr || "Never"}`);
-    });
-  } else {
-    log("No YouTube cookies found. Sign in to YouTube first.");
+async function checkHealth() {
+  const now = Date.now();
+  if (healthCache.ok !== null && now - healthCache.timestamp < HEALTH_CACHE_TTL) {
+    return healthCache.ok;
   }
-  btn.disabled = false;
-  btn.textContent = "🔍 Test Cookies";
-});
-
-// ─── Privacy Mode ───
-
-chrome.storage.local.get(["privacyMode"], (result) => {
-  const toggle = $("privacy-toggle");
-  if (toggle) {
-    toggle.checked = !!result.privacyMode;
-    toggle.addEventListener("change", () => {
-      chrome.storage.local.set({ privacyMode: toggle.checked });
-      log(toggle.checked ? "🔒 Privacy Mode enabled" : "🔓 Privacy Mode disabled");
-    });
-  }
-});
-
-// ─── Download Dashboard ───
-
-async function updateDashboard() {
   try {
-    const res = await fetch(`${BACKEND_DEFAULT}/api/jobs`);
-    if (!res.ok) return;
-    const data = await res.json();
-    const jobs = data.jobs || [];
-    const queued = jobs.filter(j => j.status === "queued").length;
-    const active = jobs.filter(j => j.status === "processing").length;
-    const completed = jobs.filter(j => j.status === "completed").length;
-    const etaJob = jobs.find(j => j.status === "processing" && j.eta);
-    const eta = etaJob?.eta || "—";
-
-    $("dash-queue").textContent = queued;
-    $("dash-active").textContent = active;
-    $("dash-completed").textContent = completed;
-    $("dash-eta").textContent = eta;
-    $("dashboard-section").style.display = "block";
-
-    if (active > 0 || queued > 0) {
-      $("dash-queue").style.color = queued > 0 ? "#eab308" : "#22c55e";
-      $("dash-active").style.color = active > 0 ? "#22c55e" : "#64748b";
-      const detail = jobs.filter(j => j.status !== "completed").slice(0, 3).map(j =>
-        `${j.inputName?.slice(0, 25) || "Job"} → ${j.status} (${j.progress || 0}%)`
-      ).join("<br>");
-      $("dashboard-detail").innerHTML = detail;
-
-      // Storage estimate
-      const totalBytes = jobs.reduce((sum, j) => sum + (j.inputSize || 0) + (j.outputSize || 0), 0);
-      const storageStr = totalBytes > 1024 * 1024 * 1024
-        ? `${(totalBytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
-        : totalBytes > 1024 * 1024
-          ? `${(totalBytes / (1024 * 1024)).toFixed(0)} MB`
-          : `${(totalBytes / 1024).toFixed(0)} KB`;
-      $("dashboard-detail").innerHTML += `<br>💾 Storage: ${storageStr}`;
-    } else {
-      $("dashboard-detail").textContent = "No active jobs";
-    }
-  } catch { /* backend unreachable */ }
+    const res = await fetch(`${BACKEND_DEFAULT}/api/health`);
+    healthCache = { ok: res.ok, timestamp: now };
+    return res.ok;
+  } catch {
+    healthCache = { ok: false, timestamp: now };
+    return false;
+  }
 }
-
-// ─── Multi-Tab Batch Queue ───
-
-$("action-all-tabs").addEventListener("click", async () => {
-  const btn = $("action-all-tabs");
-  btn.disabled = true;
-  btn.textContent = "⏳ Scanning...";
-  try {
-    const tabs = await chrome.tabs.query({ url: ["*://*.youtube.com/*", "*://*.soundcloud.com/*", "*://*.vimeo.com/*", "*://*.twitter.com/*", "*://*.x.com/*", "*://*.reddit.com/*", "*://*.tiktok.com/*", "*://*.instagram.com/*"] });
-    const supported = tabs.filter(t => t.url && !t.url.includes("accounts.google"));
-    if (supported.length === 0) {
-      log("No supported tabs found", "warn");
-      btn.textContent = "📑 All Tabs";
-      btn.disabled = false;
-      return;
-    }
-    log(`Sending ${supported.length} URLs to Transmux...`);
-    for (const tab of supported) {
-      openTransmux(tab.url, { action: "queue" });
-    }
-    logSuccess(`Sent ${supported.length} URLs to queue!`);
-  } catch (e) {
-    logError(`Batch queue failed: ${e.message}`);
-  }
-  btn.textContent = "📑 All Tabs";
-  btn.disabled = false;
-});
-
-// ─── Sync Accounts + Presets (B.13) ───
-
-async function getApiKey() {
-  return new Promise(resolve => {
-    chrome.storage.local.get(["transmuxApiKey"], (r) => resolve(r.transmuxApiKey || ""));
-  });
-}
-
-async function doSync(type) {
-  const apiKey = await getApiKey();
-  if (!apiKey) {
-    log("Set API key in Transmux web app (Header > API Key)", "warn");
-    return;
-  }
-  const btn = $(`sync-${type}`);
-  const orig = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = "⏳ Syncing...";
-  try {
-    if (type === "presets") {
-      // Try to load remote presets
-      const remote = await fetch(`${BACKEND_DEFAULT}/api/sync/presets?key=${encodeURIComponent(apiKey)}`).then(r => r.json());
-      if (remote.success && remote.presets?.length > 0) {
-        logSuccess(`Loaded ${remote.presets.length} presets from cloud`);
-        chrome.storage.local.set({ syncedPresets: remote.presets });
-      } else {
-        // No remote presets — save local ones
-        chrome.storage.local.get(["localPresets"], async (r) => {
-          const local = r.localPresets || [];
-          if (local.length > 0) {
-            const result = await fetch(`${BACKEND_DEFAULT}/api/sync/presets`, {
-              method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ key: apiKey, presets: local }),
-            }).then(r => r.json());
-            if (result.success) logSuccess(`Saved ${local.length} presets to cloud`);
-          } else {
-            log("No presets to sync", "warn");
-          }
-        });
-      }
-    } else if (type === "history") {
-      const remote = await fetch(`${BACKEND_DEFAULT}/api/sync/history?key=${encodeURIComponent(apiKey)}`).then(r => r.json());
-      if (remote.success && remote.history?.length > 0) {
-        logSuccess(`Loaded ${remote.history.length} history entries from cloud`);
-        chrome.storage.local.set({ syncedHistory: remote.history });
-      } else {
-        chrome.storage.local.get(["localHistory"], async (r) => {
-          const local = r.localHistory || [];
-          if (local.length > 0) {
-            const result = await fetch(`${BACKEND_DEFAULT}/api/sync/history`, {
-              method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ key: apiKey, history: local }),
-            }).then(r => r.json());
-            if (result.success) logSuccess(`Saved ${local.length} history entries to cloud`);
-          } else {
-            log("No history to sync", "warn");
-          }
-        });
-      }
-    }
-  } catch (e) {
-    logError(`Sync failed: ${e.message}`);
-  }
-  btn.textContent = orig;
-  btn.disabled = false;
-}
-
-$("sync-presets").addEventListener("click", () => doSync("presets"));
-$("sync-history").addEventListener("click", () => doSync("history"));
-
-// ─── Check for clipboard-detected URLs ───
-
-chrome.storage.local.get(["detectedClipboardUrl", "detectedAt"], (result) => {
-  if (result.detectedClipboardUrl && result.detectedAt && Date.now() - result.detectedAt < 60000) {
-    log(`📋 Clipboard: ${result.detectedClipboardUrl.slice(0, 60)}...`);
-    // Offer to convert
-    const container = $("media-content");
-    if (container.querySelector(".no-media")) {
-      const url = result.detectedClipboardUrl;
-      const site = detectSiteFromUrl(url);
-      const siteName = site?.label || "URL";
-      container.innerHTML = `
-        <div class="media-card">
-          <div class="media-title">📋 Clipboard Detected: ${siteName}</div>
-          <div class="media-meta">${url.slice(0, 60)}${url.length > 60 ? "..." : ""}</div>
-          <div class="media-actions">
-            <button class="btn btn-primary btn-sm" id="clipboard-convert">🔄 Convert</button>
-            <button class="btn btn-success btn-sm" id="clipboard-mp3">🎵 MP3</button>
-            <button class="btn btn-outline btn-sm" id="clipboard-clear">✕ Dismiss</button>
-          </div>
-        </div>`;
-      setTimeout(() => {
-        const cvt = document.getElementById("clipboard-convert");
-        const mp3 = document.getElementById("clipboard-mp3");
-        const clr = document.getElementById("clipboard-clear");
-        if (cvt) cvt.addEventListener("click", () => openTransmux(url));
-        if (mp3) mp3.addEventListener("click", () => openTransmux(url, { outputFormat: "mp3" }));
-        if (clr) clr.addEventListener("click", () => { chrome.storage.local.remove("detectedClipboardUrl"); location.reload(); });
-      }, 100);
-    }
-  }
-});
 
 // ─── Initialize ───
 
-(async function init() {
-  $("status-dot").className = "status-dot online";
-  $("status-label").textContent = "Active";
+document.addEventListener("DOMContentLoaded", () => {
+  // Quick Actions
+  $("action-mp3").addEventListener("click", async () => {
+    const tab = await detectCurrentTab();
+    if (tab?.url) openTransmux(tab.url, { outputFormat: "mp3" });
+  });
+  $("action-mp4").addEventListener("click", async () => {
+    const tab = await detectCurrentTab();
+    if (tab?.url) openTransmux(tab.url, { outputFormat: "mp4" });
+  });
+  $("action-gif").addEventListener("click", async () => {
+    const tab = await detectCurrentTab();
+    if (tab?.url) openTransmux(tab.url, { outputFormat: "gif" });
+  });
+  $("action-clip").addEventListener("click", async () => {
+    const tab = await detectCurrentTab();
+    if (tab?.url) openTransmux(tab.url, { action: "clip" });
+  });
+  $("action-remux").addEventListener("click", async () => {
+    const tab = await detectCurrentTab();
+    if (tab?.url) openTransmux(tab.url, { outputFormat: "mp4", videoCodec: "copy", audioCodec: "copy" });
+  });
 
-  await updateSiteDetection();
-  await updateMediaDetection();
-  await updateCookieUI();
-  updateDashboard();
+  // Cookie buttons
+  $("refresh-cookies").addEventListener("click", async () => {
+    const btn = $("refresh-cookies");
+    btn.disabled = true;
+    btn.textContent = "🔄 Sending...";
+    await sendCurrentCookies();
+    await updateCookieUI();
+    btn.disabled = false;
+    btn.textContent = "🔄 Refresh Now";
+  });
 
-  // Refresh dashboard periodically
-  setInterval(updateDashboard, 10000);
-
-  // Check if extension is connected to Transmux backend
-  try {
-    const res = await fetch(`${BACKEND_DEFAULT}/api/health`);
-    if (res.ok) {
-      $("status-dot").className = "status-dot online";
-      $("status-label").textContent = "Connected";
+  $("test-cookies").addEventListener("click", async () => {
+    const btn = $("test-cookies");
+    btn.disabled = true;
+    btn.textContent = "🔍 Checking...";
+    const count = await countCookies();
+    if (count > 0) {
+      logSuccess(`Found ${count} YouTube cookies ✓`);
+      chrome.storage.local.get("lastSentStr", (r) => {
+        log(`Last sent: ${r.lastSentStr || "Never"}`);
+      });
+    } else {
+      log("No YouTube cookies found. Sign in to YouTube first.");
     }
-  } catch {
-    $("status-dot").className = "status-dot offline";
-    $("status-label").textContent = "Offline";
+    btn.disabled = false;
+    btn.textContent = "🔍 Test Cookies";
+  });
+
+  // Multi-Tab Batch Queue
+  $("action-all-tabs").addEventListener("click", async () => {
+    const btn = $("action-all-tabs");
+    btn.disabled = true;
+    btn.textContent = "⏳ Scanning...";
+    try {
+      const tabs = await chrome.tabs.query({ url: ["*://*.youtube.com/*", "*://*.soundcloud.com/*", "*://*.vimeo.com/*", "*://*.twitter.com/*", "*://*.x.com/*", "*://*.reddit.com/*", "*://*.tiktok.com/*", "*://*.instagram.com/*"] });
+      const supported = tabs.filter(t => t.url && !t.url.includes("accounts.google"));
+      if (supported.length === 0) {
+        log("No supported tabs found", "warn");
+        btn.textContent = "📑 All Tabs";
+        btn.disabled = false;
+        return;
+      }
+      log(`Sending ${supported.length} URLs to Transmux...`);
+      for (const tab of supported) {
+        openTransmux(tab.url, { action: "queue" });
+      }
+      logSuccess(`Sent ${supported.length} URLs to queue!`);
+    } catch (e) {
+      logError(`Batch queue failed: ${e.message}`);
+    }
+    btn.textContent = "📑 All Tabs";
+    btn.disabled = false;
+  });
+
+  // Sync buttons
+  $("sync-presets").addEventListener("click", () => doSync("presets"));
+  $("sync-history").addEventListener("click", () => doSync("history"));
+
+  // Privacy Mode
+  chrome.storage.local.get(["privacyMode"], (result) => {
+    const toggle = $("privacy-toggle");
+    if (toggle) {
+      toggle.checked = !!result.privacyMode;
+      toggle.addEventListener("change", () => {
+        chrome.storage.local.set({ privacyMode: toggle.checked });
+        log(toggle.checked ? "🔒 Privacy Mode enabled" : "🔓 Privacy Mode disabled");
+      });
+    }
+  });
+
+  // Clipboard Detection
+  chrome.storage.local.get(["detectedClipboardUrl", "detectedAt"], (result) => {
+    if (result.detectedClipboardUrl && result.detectedAt && Date.now() - result.detectedAt < 60000) {
+      pendingClipboardUrl = result.detectedClipboardUrl;
+      log(`📋 Clipboard: ${result.detectedClipboardUrl.slice(0, 60)}...`);
+      const container = $("media-content");
+      if (container && container.querySelector(".no-media")) {
+        const url = result.detectedClipboardUrl;
+        const site = detectSiteFromUrl(url);
+        const siteName = site?.label || "URL";
+        container.innerHTML = `
+          <div class="media-card">
+            <div class="media-title">📋 Clipboard Detected: ${siteName}</div>
+            <div class="media-meta">${url.slice(0, 60)}${url.length > 60 ? "..." : ""}</div>
+            <div class="media-actions">
+              <button class="btn btn-primary btn-sm" id="clipboard-convert">🔄 Convert</button>
+              <button class="btn btn-success btn-sm" id="clipboard-mp3">🎵 MP3</button>
+              <button class="btn btn-outline btn-sm" id="clipboard-clear">✕ Dismiss</button>
+            </div>
+          </div>`;
+      }
+    }
+  });
+
+  // Event Delegation for Media Container
+  const container = $("media-content");
+  if (container) {
+    container.addEventListener("click", (e) => {
+      const btn = e.target.closest("button");
+      if (!btn) return;
+
+      const src = btn.dataset.src;
+
+      if (btn.classList.contains("media-convert")) {
+        openTransmux(src);
+      } else if (btn.classList.contains("media-mp3")) {
+        openTransmux(src, { outputFormat: "mp3" });
+      } else if (btn.classList.contains("media-gif")) {
+        openTransmux(src, { outputFormat: "gif" });
+      } else if (btn.classList.contains("media-copy")) {
+        navigator.clipboard.writeText(src).then(() => {
+          logSuccess("URL copied!");
+        }).catch(() => logError("Copy failed"));
+      } else if (btn.id === "clipboard-convert") {
+        if (pendingClipboardUrl) openTransmux(pendingClipboardUrl);
+      } else if (btn.id === "clipboard-mp3") {
+        if (pendingClipboardUrl) openTransmux(pendingClipboardUrl, { outputFormat: "mp3" });
+      } else if (btn.id === "clipboard-clear") {
+        chrome.storage.local.remove("detectedClipboardUrl");
+        location.reload();
+      }
+    });
   }
 
-  log("Transmux v5.0 ready");
-})();
+  // Initialize dashboard, detection, and status
+  (async () => {
+    $("status-dot").className = "status-dot online";
+    $("status-label").textContent = "Active";
+
+    await updateSiteDetection();
+    await updateMediaDetection();
+    await updateCookieUI();
+    updateDashboard();
+
+    dashboardInterval = setInterval(updateDashboard, 10000);
+
+    const healthy = await checkHealth();
+    if (healthy) {
+      $("status-dot").className = "status-dot online";
+      $("status-label").textContent = "Connected";
+    } else {
+      $("status-dot").className = "status-dot offline";
+      $("status-label").textContent = "Offline";
+    }
+
+    log("Transmux v5.0 ready");
+  })();
+});
+
+// Cleanup on popup close
+window.addEventListener("unload", () => {
+  if (dashboardInterval) {
+    clearInterval(dashboardInterval);
+    dashboardInterval = null;
+  }
+});

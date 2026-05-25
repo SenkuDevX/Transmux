@@ -77,26 +77,30 @@ export default function TranscodeSettings({
   const [thumbnails, setThumbnails] = useState<string[]>([]);
 
   useEffect(() => {
-    fetch("/api/hardware-accel")
+    const controller = new AbortController();
+    fetch("/api/hardware-accel", { signal: controller.signal })
       .then((r) => r.json())
       .then((d) => { if (d.success && d.available) setAvailableHwAccel(d.available); })
       .catch(() => {});
+    return () => controller.abort();
   }, []);
 
   // Fetch frame thumbnails when duration is known
   useEffect(() => {
     if (!initialDuration || initialDuration <= 0) return;
+    const controller = new AbortController();
     const fetchThumbs = async () => {
       try {
         const params = new URLSearchParams(window.location.search);
         const jobId = params.get("jobId") || "";
         if (!jobId) return;
-        const res = await fetch(`/api/thumbnails/${jobId}?count=20`);
+        const res = await fetch(`/api/thumbnails/${jobId}?count=20`, { signal: controller.signal });
         const data = await res.json();
         if (data.success && data.thumbnails) setThumbnails(data.thumbnails);
       } catch {}
     };
     fetchThumbs();
+    return () => controller.abort();
   }, [initialDuration]);
 
   // Helper: parse bitrate string like "192k" or "512k" to kbps number

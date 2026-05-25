@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Link2, Sparkles, Loader2, AlertCircle, Chrome, RefreshCw, List } from "lucide-react";
 import { apiFetch } from "../api";
 
@@ -20,12 +20,24 @@ export default function UrlInput({ onMetadataFetched, onUrlReset, activeUrl, onL
   const [multiUrl, setMultiUrl] = useState(false);
   const [multiUrls, setMultiUrls] = useState("");
   const pendingUrl = useRef<string>("");
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   const submitUrl = async (targetUrl: string) => {
     setErrorText(null);
     setIsLoading(true);
     setWaitingCookies(false);
     if (onLoadingChange) onLoadingChange(true);
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
     try {
       // First: check if this is a playlist
@@ -34,6 +46,7 @@ export default function UrlInput({ onMetadataFetched, onUrlReset, activeUrl, onL
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ url: targetUrl }),
+          signal: controller.signal,
         });
         const playlistData = await playlistRes.json();
         if (playlistRes.ok && playlistData.success && playlistData.isPlaylist && playlistData.count > 1) {
@@ -49,6 +62,7 @@ export default function UrlInput({ onMetadataFetched, onUrlReset, activeUrl, onL
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: targetUrl }),
+        signal: controller.signal,
       });
 
       const data = await response.json();
@@ -62,7 +76,9 @@ export default function UrlInput({ onMetadataFetched, onUrlReset, activeUrl, onL
         setErrorText(data.error || "The link could not be parsed. Make sure it points to a valid public stream.");
       }
     } catch {
-      setErrorText("Connecting to media inspector failed. Please retry.");
+      if (!controller.signal.aborted) {
+        setErrorText("Connecting to media inspector failed. Please retry.");
+      }
     } finally {
       setIsLoading(false);
       if (onLoadingChange) onLoadingChange(false);

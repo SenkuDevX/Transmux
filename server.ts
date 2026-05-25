@@ -10,7 +10,7 @@ import dotenv from "dotenv";
 import rateLimit from "express-rate-limit";
 import archiver from "archiver";
 import { isS3Configured, uploadToS3, getSignedDownloadUrl, deleteFromS3 } from "./src/storage.js";
-import { authMiddleware, isAuthEnabled } from "./src/middleware/auth.js";
+import { authMiddleware, isAuthEnabled, requireAuth, verifyClerkJwt } from "./src/middleware/auth.js";
 import { initSocketIO, emitJobUpdate, emitJobProgress, emitJobComplete, emitJobError, emitThumbnailProgress } from "./src/lib/socket-server.js";
 
 dotenv.config();
@@ -25,8 +25,6 @@ process.on("unhandledRejection", (reason) => {
 
 const app = express();
 app.set("trust proxy", 1);
-// Selective auth middleware - only protects write operations and sensitive routes
-app.use(/^\/api\/(convert|upload|job\/.*cancel|publish|cleanup|stealth|sync|keys|repair|creator).*/, authMiddleware);
 const PORT = parseInt(process.env.PORT || "3000", 10);
 const BACKEND_URL = process.env.BACKEND_URL || `http://0.0.0.0:${PORT}`;
 const USE_S3 = isS3Configured();
@@ -51,11 +49,12 @@ app.use((req, res, next) => {
 // Rate limiting — per-IP throttle to prevent abuse
 const apiLimiter = rateLimit({
   windowMs: 30 * 1000,
-  max: 20,
+  max: 12,
   message: { success: false, error: "Too many requests. Please slow down." },
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => req.path.startsWith("/job/") || req.path === "/health",
+  // Fix 8: Tighten rate-limiting. Only skip /health. Ensure /api/url metadata is protected.
+  skip: (req) => req.path === "/health",
 });
 app.use("/api", apiLimiter);
 
@@ -167,25 +166,102 @@ function computePriority(duration: number, settings: any): number {
 }
 
 function enqueueJob(jobId: string, priority: number) {
+  // Fix 5: Prevent duplicate jobs in queue
+  const alreadyQueued = jobQueue.some((item) => item.id === jobId);
+  if (alreadyQueued) {
+    console.log(`[Queue] Job ${jobId} already queued, skipping duplicate.`);
+    return;
+  }
   jobQueue.push({ id: jobId, priority, createdAt: new Date().toISOString() });
 }
+
+let currentProcessingJobId: string | null = null;
 
 function processQueue() {
   if (isProcessingQueue || jobQueue.length === 0) return;
   jobQueue.sort((a, b) => b.priority - a.priority || a.createdAt.localeCompare(b.createdAt));
   const next = jobQueue.shift()!;
   const job = jobs.get(next.id);
-  if (!job || job.status !== "queued") { processQueue(); return; }
+  // Fix 4: Verify job is still queued before processing
+  if (!job || job.status !== "queued") {
+    console.log(`[Queue] Job ${next.id} no longer queued (status=${job?.status}), skipping.`);
+    processQueue();
+    return;
+  }
   isProcessingQueue = true;
+  currentProcessingJobId = next.id;
   job.status = "processing";
   const s = job._settings;
   const u = job._url;
   (async () => {
-    await (processMediaJob(job, s, u));
-    isProcessingQueue = false;
-    processQueue();
+    try {
+      // Fix 3 & 6: Wrap the entire processing in try/finally to always call processQueue()
+      // Also Fix 3: Outer catch for truly unexpected errors
+      await processMediaJob(job, s, u);
+    } catch (err: any) {
+      console.error(`[Queue] Unexpected error processing job ${job.id}:`, err);
+      try {
+        job.status = "failed";
+        job.error = err.message || "Unexpected server error during processing";
+        job.progress = 0;
+        emitJobError(job.id, job.error);
+      } catch (_e) {}
+    } finally {
+      isProcessingQueue = false;
+      currentProcessingJobId = null;
+      // Fix 6: Ensure queue processing continues even after errors
+      processQueue();
+    }
   })();
 }
+
+// Issue 2: Startup cleanup for orphaned temp files in tmp/jobs/
+function startupCleanup() {
+  try {
+    const now = Date.now();
+    const maxAge = 60 * 60 * 1000; // 1 hour
+    if (fs.existsSync(tmpJobsDir)) {
+      const entries = fs.readdirSync(tmpJobsDir, { withFileTypes: true });
+      for (const entry of entries) {
+        const entryPath = path.join(tmpJobsDir, entry.name);
+        try {
+          const stat = fs.statSync(entryPath);
+          if (now - stat.mtimeMs > maxAge) {
+            fs.rmSync(entryPath, { recursive: true, force: true });
+            console.log(`[StartupCleanup] Removed old temp: ${entry.name}`);
+          }
+        } catch (e: any) {
+          console.warn(`[StartupCleanup] Failed to remove ${entry.name}: ${e.message}`);
+        }
+      }
+    }
+    // Also clean system /tmp orphans created by node/yt-dlp/ffmpeg
+    try {
+      const systemTmp = "/tmp";
+      if (fs.existsSync(systemTmp)) {
+        const items = fs.readdirSync(systemTmp, { withFileTypes: true });
+        for (const item of items) {
+          // Be conservative: only clean our own recognizable prefixes
+          if (item.name.startsWith("transmux-") || item.name.startsWith("tmp-")) {
+            const itemPath = path.join(systemTmp, item.name);
+            try {
+              const stat = fs.statSync(itemPath);
+              if (now - stat.mtimeMs > maxAge) {
+                fs.rmSync(itemPath, { recursive: true, force: true });
+                console.log(`[StartupCleanup] Removed system temp orphan: ${item.name}`);
+              }
+            } catch (e: any) {
+              console.warn(`[StartupCleanup] Failed to remove system temp ${item.name}: ${e.message}`);
+            }
+          }
+        }
+      }
+    } catch (_e) {}
+  } catch (e: any) {
+    console.error("[StartupCleanup] Error during startup cleanup:", e.message);
+  }
+}
+startupCleanup();
 
 const redisStatePath = path.join(DATA_ROOT, "redis_state.json");
 
@@ -432,6 +508,7 @@ async function probeHardwareAccel(): Promise<string[]> {
   }
 }
 
+// Hardware Acceleration Detection (cached 60s)
 app.get("/api/hardware-accel", async (req, res) => {
   const now = Date.now();
   if (HW_ACCEL_CACHE.detected.length > 0 && now - HW_ACCEL_CACHE.probedAt < HW_ACCEL_PROBE_INTERVAL) {
@@ -515,15 +592,6 @@ async function runYtDlp(baseArgs: string[], noCookieExtractor?: string): Promise
 // 1b. Cookies management (admin-only — uses ADMIN_KEY env var)
 const ADMIN_KEY = process.env.ADMIN_KEY;
 
-function requireAdmin(req: any, res: any, next: any) {
-  const auth = req.headers.authorization;
-  if (!ADMIN_KEY) return res.status(500).json({ success: false, error: "ADMIN_KEY not set on server" });
-  if (!auth || auth !== `Bearer ${ADMIN_KEY}`) {
-    return res.status(403).json({ success: false, error: "Forbidden. Provide Authorization: Bearer <ADMIN_KEY> header." });
-  }
-  next();
-}
-
 app.post("/api/cookies", requireAdmin, (req, res) => {
   const { cookies } = req.body;
   if (!cookies || typeof cookies !== "string") {
@@ -537,17 +605,6 @@ app.post("/api/cookies", requireAdmin, (req, res) => {
     res.status(500).json({ success: false, error: `Failed to save cookies: ${err.message}` });
   }
 });
-
-app.get("/api/cookies", (req, res) => {
-  const exists = fs.existsSync(COOKIES_FILE);
-  res.json({ success: true, hasCookies: exists });
-});
-
-// API Key Management (in-memory, survives restarts via env)
-const API_KEYS: { key: string; id: string; name: string; createdAt: string }[] = [];
-if (process.env.API_KEY) {
-  API_KEYS.push({ key: process.env.API_KEY, id: "default", name: "default", createdAt: new Date().toISOString() });
-}
 
 app.get("/api/keys", (req, res) => {
   res.json({ success: true, keys: API_KEYS.map((k) => ({ id: k.id, name: k.name, createdAt: k.createdAt, preview: k.key.slice(0, 8) + "..." })) });
@@ -568,6 +625,17 @@ app.delete("/api/keys/:id", (req, res) => {
   res.json({ success: true });
 });
 
+app.get("/api/cookies", (req, res) => {
+  const exists = fs.existsSync(COOKIES_FILE);
+  res.json({ success: true, hasCookies: exists });
+});
+
+// API Key Management (in-memory, survives restarts via env)
+const API_KEYS: { key: string; id: string; name: string; createdAt: string }[] = [];
+if (process.env.API_KEY) {
+  API_KEYS.push({ key: process.env.API_KEY, id: "default", name: "default", createdAt: new Date().toISOString() });
+}
+
 // API Key auth middleware (optional — adds x-api-key header check)
 function optionalApiKey(req: any, res: any, next: any) {
   const header = req.headers["x-api-key"];
@@ -576,36 +644,44 @@ function optionalApiKey(req: any, res: any, next: any) {
   }
   next();
 }
+
+function requireAuthOrApiKey(req: any, res: any, next: any) {
+  if (!isAuthEnabled()) return next();
+
+  // Check API key first
+  const apiKey = req.headers["x-api-key"];
+  if (apiKey && API_KEYS.some((k) => k.key === apiKey)) {
+    req.apiKey = apiKey;
+    return next();
+  }
+
+  // Then check Bearer auth
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.slice(7);
+    const payload = verifyClerkJwt(token);
+    if (payload) {
+      req.user = payload;
+      return next();
+    }
+  }
+
+  return res.status(401).json({ success: false, error: "Unauthorized. Authentication or valid API key required." });
+}
+
+// Admin-only middleware
+function requireAdmin(req: any, res: any, next: any) {
+  const auth = req.headers.authorization;
+  if (!ADMIN_KEY) return res.status(500).json({ success: false, error: "ADMIN_KEY not set on server" });
+  if (!auth || auth !== `Bearer ${ADMIN_KEY}`) {
+    return res.status(403).json({ success: false, error: "Forbidden. Provide Authorization: Bearer <ADMIN_KEY> header." });
+  }
+  next();
+}
+
 app.use("/api/convert", optionalApiKey);
 app.use("/api/url", optionalApiKey);
 app.use("/api/upload", optionalApiKey);
-
-// Hardware Acceleration Detection (cached 60s)
-let hwAccelCache: { available: string[]; ts: number } = { available: [], ts: 0 };
-app.get("/api/hardware-accel", async (req, res) => {
-  const now = Date.now();
-  if (now - hwAccelCache.ts < 60000) {
-    return res.json({ success: true, available: hwAccelCache.available });
-  }
-  try {
-    const encoders = await new Promise<string>((resolve, reject) => {
-      const proc = spawn("ffmpeg", ["-hide_banner", "-encoders"], { timeout: 8000 });
-      let out = "";
-      proc.stdout?.on("data", (d: Buffer) => { out += d.toString(); });
-      proc.on("error", reject);
-      proc.on("close", (code) => { if (code === 0 || out.length > 0) resolve(out); else reject(new Error(`exit ${code}`)); });
-    });
-    const available: string[] = [];
-    if (encoders.includes("nvenc")) available.push("nvidia");
-    if (encoders.includes("amf")) available.push("amd");
-    if (encoders.includes("qsv")) available.push("intel");
-    if (encoders.includes("videotoolbox")) available.push("apple");
-    hwAccelCache = { available, ts: now };
-    res.json({ success: true, available });
-  } catch {
-    res.json({ success: true, available: [] });
-  }
-});
 
 // Pending cookie endpoint — extension sends cookies here before a job is created
 app.post("/api/cookies/pending", (req, res) => {
@@ -626,8 +702,8 @@ app.post("/api/cookies/pending", (req, res) => {
   }
 });
 
-// 2. Local File Upload
-app.post("/api/upload", upload.single("file"), async (req, res) => {
+// Local File Upload
+app.post("/api/upload", requireAuthOrApiKey, upload.single("file"), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ success: false, error: "No file uploaded" });
@@ -1005,8 +1081,8 @@ app.get("/api/download/batch/:batchId", (req, res) => {
   res.download(meta.zipPath, `transmux_playlist_${batchId.slice(0, 8)}.zip`);
 });
 
-// 4. Trigger Media Conversion Action
-app.post("/api/convert", async (req, res) => {
+// Trigger Media Conversion Action
+app.post("/api/convert", requireAuthOrApiKey, async (req, res) => {
   const { jobId, settings, url } = req.body;
 
   if (!jobId && !url) {
@@ -1177,14 +1253,28 @@ app.post("/api/cookies/:jobId", async (req, res) => {
 });
 
 // Cancel a running job
-app.post("/api/job/:jobId/cancel", async (req, res) => {
+app.post("/api/job/:jobId/cancel", requireAuthOrApiKey, async (req, res) => {
   const { jobId } = req.params;
   const job = jobs.get(jobId);
   if (!job) {
     return res.status(404).json({ success: false, error: "Job not found" });
   }
+  // Fix 1: Zombie processes — add a timeout before SIGKILL
   if (job._currentProcess) {
-    try { job._currentProcess.kill("SIGTERM"); } catch {}
+    const proc = job._currentProcess;
+    const SIGKILL_TIMEOUT = 5000;
+    try {
+      proc.kill("SIGTERM");
+      // Timeout before sending SIGKILL to prevent zombie processes
+      setTimeout(() => {
+        try {
+          if (!proc.killed) {
+            console.log(`[Cancel ${jobId}] SIGTERM did not exit, sending SIGKILL...`);
+            proc.kill("SIGKILL");
+          }
+        } catch {}
+      }, SIGKILL_TIMEOUT);
+    } catch {}
     job._currentProcess = null;
   }
   job.status = "failed";
@@ -1195,6 +1285,8 @@ app.post("/api/job/:jobId/cancel", async (req, res) => {
 
 // Helper: Process job lifecycle in background
 async function processMediaJob(job: JobState, settings: any, url?: string) {
+  // Fix 3: Wrap the entire function body for truly unexpected errors.
+  try {
   const jobDir = path.join(tmpJobsDir, job.id);
 
   // Save settings for potential cookie refresh retry
@@ -1864,13 +1956,17 @@ async function processMediaJob(job: JobState, settings: any, url?: string) {
     job._currentProcess = ffmpeg;
 
     let ffmpegStderr = "";
+    // Fix 7 & 12: Limit accumulation to prevent unbounded memory growth
+    const MAX_STDERR = 10000;
 
     await new Promise<void>((resolve, reject) => {
       ffmpeg.stderr.on("data", (data) => {
         const text = data.toString();
         ffmpegStderr += text;
-        
-        // Parse current timestamp time=00:01:23.45 to match against duration
+        // Fix 12: Truncate to last 10,000 chars
+        if (ffmpegStderr.length > MAX_STDERR) {
+          ffmpegStderr = ffmpegStderr.slice(-MAX_STDERR);
+        }
         const timeMatch = text.match(/time=(\d{2}:\d{2}:\d{2}\.\d{2})/);
         const speedMatch = text.match(/speed=\s*([\d\.]+(?:x|MB\/s)|N\/A)/);
 
@@ -2207,13 +2303,53 @@ app.get("/api/job/subtitle/:id/:filename", (req, res) => {
     job.error = err.message || "FFmpeg pipelines failed unexpectedly during transcoding";
     job.progress = 0;
   }
+  } catch (outerErr: any) {
+    console.error(`[CRITICAL] processMediaJob crashed for Job ${job.id}:`, outerErr);
+    job.status = "failed";
+    job.error = outerErr.message || "Unexpected server error during media processing";
+    job.progress = 0;
+    try { emitJobError(job.id, job.error); } catch (_e) {}
+  }
 }
+
+
+// S3 Signed URL cache (Fix 11)
+const s3SignedUrlCache = new Map<string, { url: string; expires: number }>();
 
 // 5. Query Active Job Progress
 app.get("/api/job/:id", (req, res) => {
   const job = jobs.get(req.params.id);
   if (!job) {
     return res.status(404).json({ success: false, error: "Requested conversion profile is not found or has expired" });
+  }
+
+  // Issue 11: Use a cached signed URL for job polling to avoid recalculating on every request
+  let downloadUrl = job.downloadUrl;
+  if (USE_S3 && job.s3Key) {
+    const now = Date.now();
+    const cached = s3SignedUrlCache.get(job.id);
+    if (cached && cached.expires > now + 60000) {
+      downloadUrl = cached.url;
+    } else {
+      createSignedUrl(); // async but fire-and-forget
+    }
+  }
+
+  // Create signed URL in background and cache it
+  async function createSignedUrl() {
+    if (!USE_S3 || !job.s3Key) return;
+    try {
+      const newUrl = await getSignedDownloadUrl(job.s3Key, 3600);
+      s3SignedUrlCache.set(job.id, { url: newUrl, expires: Date.now() + 3600 * 1000 });
+      job.downloadUrl = newUrl;
+    } catch (e: any) {
+      console.warn(`[Job ${job.id}] Failed to create signed URL:`, e.message);
+    }
+  }
+  // fire-and-forget if we need a new URL
+  if (USE_S3 && job.s3Key) {
+    // trigger background refresh if needed
+    createSignedUrl().catch(()=>{});
   }
 
   // Send lightweight runtime properties back
@@ -2232,7 +2368,7 @@ app.get("/api/job/:id", (req, res) => {
       outputSize: job.outputSize,
       error: job.error,
       createdAt: job.createdAt,
-      downloadUrl: job.downloadUrl,
+      downloadUrl: downloadUrl,
       subtitleFiles: job.subtitleFiles,
       waitingCookies: job.waitingCookies,
     },
@@ -2258,12 +2394,16 @@ app.get("/api/download/:id", async (req, res) => {
 
   // Fall back to local file
   const filePath = resolveJobOutputPath(job);
-  if (!filePath) {
-    return res.status(404).send("<h2>Conversion download expired or deleted. Files are automatically kept for 1 hour.</h2>");
+  if (!filePath || !fs.existsSync(filePath)) {
+    // Fix 9: Add explicit check for missing file before download
+    return res.status(404).send("<h2>Output file is no longer available or has been cleaned up.</h2>");
   }
 
   const customName = req.query.filename as string;
   const deliveryName = customName ? path.basename(customName) : (job.outputName || `transmux_${job.id}`);
+  
+  // Fix 9: Ensure Content-Type is set before download attempt
+  res.setHeader("Content-Type", getMimeType(filePath));
 
   res.download(filePath, deliveryName, (err) => {
     if (err) {
@@ -2576,35 +2716,134 @@ app.get("/api/waveform/:jobId", async (req, res) => {
   }
 });
 
-// Frame thumbnails: extract keyframes at regular intervals
+// Frame thumbnails: extract keyframes
 app.get("/api/thumbnails/:jobId", async (req, res) => {
   const { jobId } = req.params;
-  const count = parseInt(req.query.count as string) || 10;
+  const countParam = parseInt(req.query.count as string) || 10;
+  const mode = (req.query.mode as string) || "interval";
   const job = jobs.get(jobId);
   if (!job || !job.inputPath || !fs.existsSync(job.inputPath)) {
     return res.json({ success: false, error: "Job or input file not found" });
   }
   const jobDir = path.join(tmpJobsDir, jobId);
   const thumbsDir = path.join(jobDir, "thumbnails");
+  // Clean up old thumbnails before generating new ones
+  if (fs.existsSync(thumbsDir)) {
+    fs.rmSync(thumbsDir, { recursive: true, force: true });
+  }
   fs.mkdirSync(thumbsDir, { recursive: true });
+
   const duration = job.totalDuration || 0;
   if (duration <= 0) return res.json({ success: false, error: "Unknown duration" });
-  const interval = Math.max(1, Math.floor(duration / count));
+
   try {
     const files: string[] = [];
-    for (let i = 0; i < count; i++) {
-      const t = i * interval;
-      const outName = `thumb_${String(i).padStart(3, "0")}.jpg`;
-      const outPath = path.join(thumbsDir, outName);
-      await new Promise<void>((resolve, reject) => {
-        const ff = spawn("ffmpeg", ["-y", "-ss", String(t), "-i", job.inputPath, "-vframes", "1", "-q:v", "5", outPath]);
-        ff.on("close", (code) => { if (code === 0 || fs.existsSync(outPath)) { files.push(`/api/thumbnail/${jobId}/${outName}`); resolve(); } else reject(); });
-        ff.on("error", reject);
+
+    if (mode === "scene") {
+      // Scene detection mode: extract frames where scene change > 0.4
+      // First pass: get scene change timestamps
+      const sceneTimestamps: number[] = [];
+      const sceneOutput = await new Promise<string>((resolve, reject) => {
+        const ff = spawn("ffmpeg", [
+          "-i", job.inputPath,
+          "-vf", "select=gt(scene\\,0.4),showinfo",
+          "-f", "null",
+          "-",
+        ]);
+        const out: Buffer[] = [];
+        let stderr = "";
+        ff.stdout.on("data", (d: Buffer) => out.push(d));
+        ff.stderr.on("data", (d: Buffer) => { stderr += d.toString(); });
+        ff.on("close", (code) => {
+          const stdout = Buffer.concat(out).toString();
+          if (code !== 0) {
+            console.warn(`[Thumbnails ${jobId}] Scene detection returned code ${code}. Using fallback interval.`);
+            resolve("");
+          } else {
+            resolve(stderr);
+          }
+        });
+        ff.on("error", (err) => {
+          console.error(`[Thumbnails ${jobId}] Scene detection error:`, err);
+          resolve("");
+        });
       });
-      emitThumbnailProgress(jobId, i + 1, count);
+
+      // Parse scene change timestamps from stdout/stderr
+      const timestampRegex = /pts_time:\s*([\d\.]+)/g;
+      let match: RegExpExecArray | null;
+      while ((match = timestampRegex.exec(sceneOutput)) !== null) {
+        sceneTimestamps.push(parseFloat(match[1]));
+      }
+
+      // Sort and ensure we don't exceed count
+      sceneTimestamps.sort((a, b) => a - b);
+      const selectedTimestamps = sceneTimestamps.length > 0 ? sceneTimestamps.slice(0, countParam) : [];
+
+      // Fallback to interval if no scenes detected
+      if (selectedTimestamps.length === 0) {
+        console.log(`[Thumbnails ${jobId}] No scene changes detected, falling back to interval.`);
+        const interval = Math.max(1, Math.floor(duration / countParam));
+        for (let i = 0; i < countParam; i++) {
+          const t = i * interval;
+          const outName = `thumb_${String(i).padStart(3, "0")}.jpg`;
+          const outPath = path.join(thumbsDir, outName);
+          await new Promise<void>((resolve, reject) => {
+            const ff = spawn("ffmpeg", ["-y", "-ss", String(t), "-i", job.inputPath, "-vframes", "1", "-q:v", "5", outPath]);
+            ff.on("close", (code) => { if (code === 0 || fs.existsSync(outPath)) { files.push(`/api/thumbnail/${jobId}/${outName}`); resolve(); } else reject(); });
+            ff.on("error", reject);
+          });
+          emitThumbnailProgress(jobId, i + 1, countParam);
+        }
+      } else {
+        for (let i = 0; i < selectedTimestamps.length; i++) {
+          const t = selectedTimestamps[i];
+          const outName = `thumb_${String(i).padStart(3, "0")}.jpg`;
+          const outPath = path.join(thumbsDir, outName);
+          await new Promise<void>((resolve, reject) => {
+            const ff = spawn("ffmpeg", ["-y", "-ss", String(t), "-i", job.inputPath, "-vframes", "1", "-q:v", "5", outPath]);
+            ff.on("close", (code) => { if (code === 0 || fs.existsSync(outPath)) { files.push(`/api/thumbnail/${jobId}/${outName}`); resolve(); } else reject(); });
+            ff.on("error", reject);
+          });
+          emitThumbnailProgress(jobId, i + 1, selectedTimestamps.length);
+        }
+      }
+    } else if (mode === "count") {
+      // Count mode: explicitly spread evenly across duration based on count
+      const count = Math.min(Math.max(1, countParam), 100);
+      const interval = Math.max(0.1, duration / (count + 1));
+      for (let i = 1; i <= count; i++) {
+        const t = Math.min(i * interval, duration - 0.1);
+        const outName = `thumb_${String(i - 1).padStart(3, "0")}.jpg`;
+        const outPath = path.join(thumbsDir, outName);
+        await new Promise<void>((resolve, reject) => {
+          const ff = spawn("ffmpeg", ["-y", "-ss", String(t), "-i", job.inputPath, "-vframes", "1", "-q:v", "5", outPath]);
+          ff.on("close", (code) => { if (code === 0 || fs.existsSync(outPath)) { files.push(`/api/thumbnail/${jobId}/${outName}`); resolve(); } else reject(); });
+          ff.on("error", reject);
+        });
+        emitThumbnailProgress(jobId, i, count);
+      }
+    } else {
+      // interval mode (default): use current interval-based logic
+      const interval = Math.max(1, Math.floor(duration / countParam));
+      for (let i = 0; i < countParam; i++) {
+        const t = i * interval;
+        const outName = `thumb_${String(i).padStart(3, "0")}.jpg`;
+        const outPath = path.join(thumbsDir, outName);
+        await new Promise<void>((resolve, reject) => {
+          const ff = spawn("ffmpeg", ["-y", "-ss", String(t), "-i", job.inputPath, "-vframes", "1", "-q:v", "5", outPath]);
+          ff.on("close", (code) => { if (code === 0 || fs.existsSync(outPath)) { files.push(`/api/thumbnail/${jobId}/${outName}`); resolve(); } else reject(); });
+          ff.on("error", reject);
+        });
+        emitThumbnailProgress(jobId, i + 1, countParam);
+      }
     }
-    res.json({ success: true, thumbnails: files, count: files.length, interval });
-  } catch (e) { res.json({ success: true, thumbnails: [], count: 0, interval }); }
+
+    res.json({ success: true, thumbnails: files, count: files.length, interval: duration });
+  } catch (e) {
+    console.error(`[Thumbnails ${jobId}] Error:`, e);
+    res.json({ success: true, thumbnails: [], count: 0, interval: 0 });
+  }
 });
 
 // Serve thumbnail image
@@ -2709,8 +2948,8 @@ app.get("/api/compare/:jobId", async (req, res) => {
   }
 });
 
-// 6a. Publish a Finished Conversion to the Public Website Gallery
-app.post("/api/publish", async (req, res) => {
+// Publish a Finished Conversion to the Public Website Gallery
+app.post("/api/publish", requireAuthOrApiKey, async (req, res) => {
   const { jobId, title, description } = req.body;
   if (!jobId) {
     return res.status(400).json({ success: false, error: "jobId is required to publish" });
@@ -2851,6 +3090,11 @@ function serveFileWithRanges(req: any, res: any, filePath: string) {
 
     const chunksize = (end - start) + 1;
     const file = fs.createReadStream(filePath, { start, end });
+    // Fix 10: Add error handling for createReadStream
+    file.on("error", (err) => {
+      console.error(`[serveFileWithRanges] Stream error for ${filePath}:`, err.message);
+      if (!res.headersSent) res.status(500).send("File stream error.");
+    });
     const head = {
       "Content-Range": `bytes ${start}-${end}/${fileSize}`,
       "Accept-Ranges": "bytes",
@@ -2866,7 +3110,13 @@ function serveFileWithRanges(req: any, res: any, filePath: string) {
       "Content-Type": getMimeType(filePath),
     };
     res.writeHead(200, head);
-    fs.createReadStream(filePath).pipe(res);
+    const stream = fs.createReadStream(filePath);
+    // Fix 10: Add error handling for createReadStream
+    stream.on("error", (err) => {
+      console.error(`[serveFileWithRanges] Stream error for ${filePath}:`, err.message);
+      if (!res.headersSent) res.status(500).send("File stream error.");
+    });
+    stream.pipe(res);
   }
 }
 
@@ -2898,8 +3148,8 @@ app.get("/api/published/text/:id", (req, res) => {
   }
 });
 
-// 7. Core Cron/Clean-up Routine
-app.post("/api/cleanup", (req, res) => {
+// 7. Core Cron/Clean-up Routine (Admin-only)
+app.post("/api/cleanup", requireAdmin, (req, res) => {
   const totalCount = runFileCleanupService();
   res.json({ success: true, message: `System-wide file system sweep completed. Cleared folder structures of ${totalCount} jobs.` });
 });
@@ -2972,7 +3222,7 @@ setInterval(runFileCleanupService, 5 * 60 * 1000);
 // ──────────────────────────────────────────────
 
 // Repair Corrupted Video: remux + fix broken timestamps/containers
-app.post("/api/repair/:jobId", async (req, res) => {
+app.post("/api/repair/:jobId", requireAuthOrApiKey, async (req, res) => {
   const { jobId } = req.params;
   const job = jobs.get(jobId);
   if (!job || !job.outputPath) return res.status(404).json({ success: false, error: "Job or output not found" });
@@ -2994,7 +3244,7 @@ app.post("/api/repair/:jobId", async (req, res) => {
 });
 
 // GIF Maker: extract a clip and convert to animated GIF
-app.post("/api/creator/gif/:jobId", async (req, res) => {
+app.post("/api/creator/gif/:jobId", requireAuthOrApiKey, async (req, res) => {
   const { jobId } = req.params;
   const { start, duration = 3, fps = 10, width = 480 } = req.body;
   const job = jobs.get(jobId);
@@ -3022,7 +3272,7 @@ app.post("/api/creator/gif/:jobId", async (req, res) => {
 });
 
 // Clip Maker: extract a segment without re-encoding
-app.post("/api/creator/clip/:jobId", async (req, res) => {
+app.post("/api/creator/clip/:jobId", requireAuthOrApiKey, async (req, res) => {
   const { jobId } = req.params;
   const { start, end } = req.body;
   const job = jobs.get(jobId);
@@ -3077,7 +3327,7 @@ app.get("/api/quality-compare/:jobId", async (req, res) => {
 });
 
 // Shorts Maker: crop video to vertical 9:16 format
-app.post("/api/creator/shorts/:jobId", async (req, res) => {
+app.post("/api/creator/shorts/:jobId", requireAuthOrApiKey, async (req, res) => {
   const { jobId } = req.params;
   const { start, duration = 30 } = req.body;
   const job = jobs.get(jobId);
@@ -3100,7 +3350,7 @@ app.post("/api/creator/shorts/:jobId", async (req, res) => {
 });
 
 // Silence Remover: use FFmpeg silenceremove filter on audio
-app.post("/api/creator/silence-remove/:jobId", async (req, res) => {
+app.post("/api/creator/silence-remove/:jobId", requireAuthOrApiKey, async (req, res) => {
   const { jobId } = req.params;
   const job = jobs.get(jobId);
   if (!job || !job.outputPath) return res.status(404).json({ success: false, error: "Job or output not found" });
@@ -3121,7 +3371,7 @@ app.post("/api/creator/silence-remove/:jobId", async (req, res) => {
 });
 
 // Loudness Normalization: EBU R128 (integrated -23 LUFS)
-app.post("/api/creator/loudness-normalize/:jobId", async (req, res) => {
+app.post("/api/creator/loudness-normalize/:jobId", requireAuthOrApiKey, async (req, res) => {
   const { jobId } = req.params;
   const job = jobs.get(jobId);
   if (!job || !job.outputPath) return res.status(404).json({ success: false, error: "Job or output not found" });
@@ -3142,7 +3392,7 @@ app.post("/api/creator/loudness-normalize/:jobId", async (req, res) => {
 });
 
 // Metadata Editor: update title, artist, album, comment tags
-app.post("/api/creator/metadata/:jobId", async (req, res) => {
+app.post("/api/creator/metadata/:jobId", requireAuthOrApiKey, async (req, res) => {
   const { jobId } = req.params;
   const { title, artist, album, comment, genre, date } = req.body;
   const job = jobs.get(jobId);

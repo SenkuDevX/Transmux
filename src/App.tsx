@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Layers, HardDrive, Globe, Info, Github, HelpCircle, Activity, Play, AlertCircle, CheckCircle2, X, Cpu, Shield, Sparkles, ExternalLink } from "lucide-react";
+import { Layers, HardDrive, Globe, Info, HelpCircle, Activity, AlertCircle, CheckCircle2, X, Cpu, Shield, Sparkles } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import Header from "./components/Header";
 import FileDropzone from "./components/FileDropzone";
@@ -14,9 +14,11 @@ import TipsCard from "./components/TipsCard";
 import SkeletonLoader from "./components/SkeletonLoader";
 import PreviewPopup from "./components/PreviewPopup";
 import PublishedGallery from "./components/PublishedGallery";
+import ErrorBoundary from "./components/ErrorBoundary";
 import CookieRefreshModal from "./components/CookieRefreshModal";
 import { apiFetch } from "./api";
 import { MediaMetadata, ConversionSettings, Job, ConversionHistoryItem } from "./types";
+import { connectSocket, onJobUpdate, onJobComplete, onJobError, subscribeToJob, unsubscribeFromJob } from "./lib/socket";
 
 const BACKEND_URL = import.meta.env.VITE_API_URL || window.location.origin;
 
@@ -81,7 +83,15 @@ export default function App() {
     try { return localStorage.getItem("transmux_banner_dismissed") !== BANNER_MESSAGE; } catch { return true; }
   });
 
+  const toastTimeoutRef = useRef<Record<string, number>>({});
+
   const showToast = (message: string, type: "success" | "error" | "info" = "info") => {
+    const key = `${message}_${type}`;
+    const now = Date.now();
+    if (toastTimeoutRef.current[key] && now - toastTimeoutRef.current[key] < 2000) {
+      return;
+    }
+    toastTimeoutRef.current[key] = now;
     setToast({ message, type });
   };
 
@@ -98,20 +108,21 @@ export default function App() {
 
   // Socket.IO connection — listen for real-time job updates
   useEffect(() => {
-    let s: any = null;
-    try {
-      import("./lib/socket").then(mod => {
-        s = mod.connectSocket();
-        if (s) {
-          s.on("jobUpdate", (data: any) => {
-            if (data.jobId === activeJob?.id && data.status === "waiting_cookies") {
-              setCookieRefreshJobId(data.jobId);
-            }
-          });
-        }
-      });
-    } catch {}
-    return () => { try { s?.disconnect(); } catch {} };
+    const socket = connectSocket();
+    if (!socket || !activeJob?.id) return;
+
+    const unsubUpdate = onJobUpdate((data) => {
+      if (data.jobId === activeJob.id && data.status === "waiting_cookies") {
+        setCookieRefreshJobId(data.jobId);
+      }
+    });
+
+    subscribeToJob(activeJob.id);
+
+    return () => {
+      unsubUpdate();
+      unsubscribeFromJob(activeJob.id);
+    };
   }, [activeJob?.id]);
 
   // Toggle theme utility
@@ -508,7 +519,7 @@ export default function App() {
         {pageLoading ? (
           <SkeletonLoader type="fullPage" />
         ) : (
-        <>
+        <ErrorBoundary>
         
         {/* Intro Hero Section */}
         <motion.div
@@ -672,7 +683,9 @@ export default function App() {
             )}
 
             {/* Tips & Knowledge */}
-            <TipsCard />
+            <ErrorBoundary>
+              <TipsCard />
+            </ErrorBoundary>
 
             {/* Active History log column card */}
             <HistoryList
@@ -691,12 +704,14 @@ export default function App() {
           transition={{ duration: 0.5, delay: 0.3, ease: "easeOut" }}
           className="pt-2"
         >
-          <PublishedGallery
-            onPreview={(id, name, size, isPub) => setPreviewMedia({ id, name, size, isPublished: isPub })}
-            syncTrigger={syncTrigger}
-          />
+          <ErrorBoundary>
+            <PublishedGallery
+              onPreview={(id, name, size, isPub) => setPreviewMedia({ id, name, size, isPublished: isPub })}
+              syncTrigger={syncTrigger}
+            />
+          </ErrorBoundary>
         </motion.div>
-        </>
+        </ErrorBoundary>
         )}
       </main>
 
@@ -731,14 +746,16 @@ export default function App() {
 
       {/* Modern scale-up transition loopback Previewer Modal */}
       {previewMedia && (
-        <PreviewPopup
-          mediaId={previewMedia.id}
-          filename={previewMedia.name}
-          size={previewMedia.size}
-          thumbnailUrl={previewMedia.thumbnailUrl}
-          isPublished={previewMedia.isPublished}
-          onClose={() => setPreviewMedia(null)}
-        />
+        <ErrorBoundary>
+          <PreviewPopup
+            mediaId={previewMedia.id}
+            filename={previewMedia.name}
+            size={previewMedia.size}
+            thumbnailUrl={previewMedia.thumbnailUrl}
+            isPublished={previewMedia.isPublished}
+            onClose={() => setPreviewMedia(null)}
+          />
+        </ErrorBoundary>
       )}
 
       {/* Cookie Refresh Modal */}

@@ -172,11 +172,8 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 
   // Stealth Download
   if (info.menuItemId === "transmux-stealth") {
-    // Create a job on the backend, then stealth-download
     const jobId = crypto.randomUUID();
-    // Notify content script to handle the stealth download
-    chrome.tabs.sendMessage(tab?.id || 0, { type: "TRANSMUX_STEALTH_DOWNLOAD", url, jobId, backendUrl: BACKEND_DEFAULT }).catch(() => {
-      // Fallback: open transmux normally
+    stealthDownload(BACKEND_DEFAULT, url, jobId, tab?.id).catch(() => {
       openTransmuxWith(url, {});
     });
   }
@@ -188,28 +185,45 @@ function openTransmuxWith(url, params) {
   chrome.tabs.create({ url: `${base}?${query.toString()}` });
 }
 
-// ─── Cookie Relay Port Connection ───
+// ─── Port Connections (cookies + auth, merged) ───
 
 chrome.runtime.onConnect.addListener((port) => {
-  if (port.name !== "transmux-cookies") return;
-  port.onMessage.addListener(async (request) => {
-    if (request.type === "TRANSMUX_GET_COOKIES") {
-      try {
-        const data = await sendCookies(request.backendUrl, request.jobId);
-        port.postMessage({ success: true, data });
-      } catch (err) {
-        port.postMessage({ success: false, error: err.message });
+  if (port.name === "transmux-cookies") {
+    port.onMessage.addListener(async (request) => {
+      if (request.type === "TRANSMUX_GET_COOKIES") {
+        try {
+          const data = await sendCookies(request.backendUrl, request.jobId);
+          port.postMessage({ success: true, data });
+        } catch (err) {
+          port.postMessage({ success: false, error: err.message });
+        }
       }
-    }
-    if (request.type === "TRANSMUX_SEND_PENDING_COOKIES") {
-      try {
-        const data = await sendPendingCookies(request.backendUrl);
-        port.postMessage({ success: true, data });
-      } catch (err) {
-        port.postMessage({ success: false, error: err.message });
+      if (request.type === "TRANSMUX_SEND_PENDING_COOKIES") {
+        try {
+          const data = await sendPendingCookies(request.backendUrl);
+          port.postMessage({ success: true, data });
+        } catch (err) {
+          port.postMessage({ success: false, error: err.message });
+        }
       }
-    }
-  });
+    });
+  } else if (port.name === "transmux-auth") {
+    port.onMessage.addListener((msg) => {
+      if (msg.type === "AUTH_LOGIN") {
+        chrome.storage.local.set({ authState: "authenticated", authUser: msg.user, authToken: msg.token });
+        port.postMessage({ success: true });
+      }
+      if (msg.type === "AUTH_LOGOUT") {
+        chrome.storage.local.remove(["authState", "authUser", "authToken"]);
+        port.postMessage({ success: true });
+      }
+      if (msg.type === "AUTH_CHECK") {
+        chrome.storage.local.get(["authState", "authUser", "authToken"], (r) => {
+          port.postMessage({ state: r.authState, user: r.authUser, token: r.authToken });
+        });
+      }
+    });
+  }
 });
 
 // ─── Tab Media Detection ───
@@ -274,28 +288,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-// ─── Auth Port Connection ───
-
-chrome.runtime.onConnect.addListener((port) => {
-  if (port.name === "transmux-auth") {
-    port.onMessage.addListener((msg) => {
-      if (msg.type === "AUTH_LOGIN") {
-        chrome.storage.local.set({ authState: "authenticated", authUser: msg.user, authToken: msg.token });
-        port.postMessage({ success: true });
-      }
-      if (msg.type === "AUTH_LOGOUT") {
-        chrome.storage.local.remove(["authState", "authUser", "authToken"]);
-        port.postMessage({ success: true });
-      }
-      if (msg.type === "AUTH_CHECK") {
-        chrome.storage.local.get(["authState", "authUser", "authToken"], (r) => {
-          port.postMessage({ state: r.authState, user: r.authUser, token: r.authToken });
-        });
-      }
-    });
-  }
-});
-
 // ─── Periodic Cookie Auto-Refresh ───
 
 chrome.alarms.create("transmux-cookie-refresh", { periodInMinutes: 30 });
@@ -349,29 +341,13 @@ async function saveHistory(backendUrl, apiKey, history) {
 
 // ─── Stealth Download Engine (B.14) ───
 
-async function stealthDownload(backendUrl, url, jobId) {
-  // Use browser fetch to get media through the user's authenticated context
+async function stealthDownload(backendUrl, url, jobId, tabId) {
   try {
-    const mediaResponse = await fetch(url, {
-      credentials: "include",
-      headers: { "Accept": "video/*, audio/*, */*" },
-    });
-    if (!mediaResponse.ok) throw new Error(`HTTP ${mediaResponse.status}`);
-    const contentType = mediaResponse.headers.get("content-type") || "";
-    const ext = contentType.includes("audio") ? ".mp3" : contentType.includes("webm") ? ".webm" : ".mp4";
-    const blob = await mediaResponse.blob();
-
-    // Send blob to backend
-    const formData = new FormData();
-    formData.append("media", blob, `stealth${ext}`);
-    formData.append("jobId", jobId);
-    formData.append("sourceUrl", url);
-
-    const uploadRes = await fetch(`${backendUrl}/api/stealth-upload`, {
-      method: "POST",
-      body: formData,
-    });
-    return uploadRes.json();
+    if (tabId) {
+      await chrome.tabs.sendMessage(tabId, { type: "TRANSMUX_STEALTH_DOWNLOAD", url, jobId, backendUrl });
+      return { success: true };
+    }
+    throw new Error("No tab ID provided");
   } catch (err) {
     console.error("[Stealth] Browser fetch failed, falling back to server:", err);
     // Fallback: tell server to download using yt-dlp impersonation

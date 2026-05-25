@@ -3,7 +3,13 @@ import { motion, AnimatePresence } from "motion/react";
 import { X, Download, Volume2, Music, Tag, Film, Image, Scissors, Smartphone, Wrench, Grid, Loader2, FileArchive } from "lucide-react";
 import { apiFetch, apiUrl } from "../api";
 
-export default function CreatorToolsPanel({ jobId, open, onClose }: { jobId: string; open: boolean; onClose: () => void }) {
+interface CreatorToolsPanelProps {
+  jobId: string;
+  open: boolean;
+  onClose: () => void;
+}
+
+export default function CreatorToolsPanel({ jobId, open, onClose }: CreatorToolsPanelProps) {
   const [loading, setLoading] = useState("");
   const [result, setResult] = useState<{ path: string; filename: string } | null>(null);
   const [meta, setMeta] = useState({ title: "", artist: "", album: "", genre: "", date: "", comment: "" });
@@ -14,6 +20,10 @@ export default function CreatorToolsPanel({ jobId, open, onClose }: { jobId: str
   const [thumbnails, setThumbnails] = useState<string[]>([]);
   const [thumbProgress, setThumbProgress] = useState(0);
   const [thumbTotal, setThumbTotal] = useState(0);
+  // Skeleton loader state: show skeleton placeholders equal to count while generating
+  const [thumbSkeletonCount, setThumbSkeletonCount] = useState(0);
+  // Image loading/error tracking: number of images that have loaded or errored
+  const [thumbImageLoadedCount, setThumbImageLoadedCount] = useState(0);
 
   const doAction = async (action: string, body?: any) => {
     setLoading(action);
@@ -27,21 +37,59 @@ export default function CreatorToolsPanel({ jobId, open, onClose }: { jobId: str
     setLoading("");
   };
 
+  // Reset thumbnails when mode changes to avoid stale data
+  useEffect(() => {
+    setThumbnails([]);
+    setThumbProgress(0);
+    setThumbTotal(0);
+    setThumbImageLoadedCount(0);
+    setThumbSkeletonCount(0);
+  }, [thumbOpts.mode]);
+
   const extractThumbnails = async () => {
+    // Validation: count must be an integer between 1 and 100
+    const countVal = parseInt(thumbOpts.count);
+    if (!thumbOpts.count || isNaN(countVal) || countVal < 1 || countVal > 100) {
+      alert("Please enter a count between 1 and 100.");
+      return;
+    }
+
     setLoading("thumbnails");
     setThumbnails([]);
     setThumbProgress(0);
+    setThumbTotal(0);
+    setThumbImageLoadedCount(0);
+    // Show skeleton placeholders immediately
+    setThumbSkeletonCount(countVal);
+
     try {
-      const count = parseInt(thumbOpts.count) || 10;
-      const r = await apiFetch(`/api/thumbnails/${jobId}?count=${count}`);
+      const count = countVal || 10;
+      const r = await apiFetch(`/api/thumbnails/${jobId}?count=${count}&mode=${thumbOpts.mode}`);
       const d = await r.json();
       if (d.success && d.thumbnails) {
         setThumbnails(d.thumbnails);
         setThumbTotal(d.count || d.thumbnails.length);
         setThumbProgress(d.count || d.thumbnails.length);
+      } else {
+        setThumbnails([]);
       }
-    } catch {}
-    setLoading("");
+    } catch (e) {
+      console.error("Thumbnail extraction failed:", e);
+    } finally {
+      setLoading("");
+      // Keep skeleton until images load (handled by onLoad/onError)
+    }
+  };
+
+  // Helper to render skeleton placeholders
+  const renderSkeletons = () => {
+    const items = [];
+    for (let i = 0; i < thumbSkeletonCount; i++) {
+      items.push(
+        <div key={`skel-${i}`} className="w-full aspect-video rounded border border-slate-200 dark:border-slate-700 bg-slate-200 dark:bg-slate-800 animate-pulse" />
+      );
+    }
+    return items;
   };
 
   return (
@@ -157,15 +205,22 @@ export default function CreatorToolsPanel({ jobId, open, onClose }: { jobId: str
                 <div className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300"><Grid className="h-3.5 w-3.5" /> Thumbnail Extractor</div>
                 <p className="text-[9px] text-slate-500">Extract keyframe screenshots at regular intervals from the video.</p>
                 <div className="flex items-center gap-2 text-[10px]">
-                  {[{k:"mode",l:"Mode",o:["interval","scene","count"]}].map(f => (
-                    <select key={f.k} value={thumbOpts.mode} onChange={(e) => setThumbOpts({...thumbOpts,mode:e.target.value as any})}
-                      className="text-[10px] px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 w-full outline-none"
-                    >
-                      {f.o.map(o => <option key={o} value={o}>{o.charAt(0).toUpperCase()+o.slice(1)}</option>)}
-                    </select>
-                  ))}
-                  <input value={thumbOpts.count} onChange={(e) => setThumbOpts({...thumbOpts,count:e.target.value})}
-                    placeholder="Count" type="number" min="1" max="50"
+                  <select
+                    value={thumbOpts.mode}
+                    onChange={(e) => setThumbOpts({ ...thumbOpts, mode: e.target.value as "interval" | "scene" | "count" })}
+                    className="text-[10px] px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 w-full outline-none"
+                  >
+                    <option value="interval">Interval</option>
+                    <option value="scene">Scene</option>
+                    <option value="count">Count</option>
+                  </select>
+                  <input
+                    value={thumbOpts.count}
+                    onChange={(e) => setThumbOpts({ ...thumbOpts, count: e.target.value })}
+                    placeholder="Count"
+                    type="number"
+                    min="1"
+                    max="100"
                     className="text-[10px] px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 w-20 outline-none"
                   />
                   <button onClick={extractThumbnails} disabled={!!loading}
@@ -177,7 +232,17 @@ export default function CreatorToolsPanel({ jobId, open, onClose }: { jobId: str
                   <div className="space-y-1">
                     <div className="flex justify-between text-[8px] text-slate-500"><span>Extracting...</span><span>{thumbProgress}/{thumbTotal}</span></div>
                     <div className="h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                      <div className="h-full bg-violet-500 rounded-full transition-all" style={{width:`${(thumbProgress/thumbTotal)*100}%`}} />
+                      <div className="h-full bg-violet-500 rounded-full transition-all" style={{ width: `${(thumbProgress / thumbTotal) * 100}%` }} />
+                    </div>
+                  </div>
+                )}
+
+                {/* Skeleton placeholders while fetching or loading images */}
+                {thumbSkeletonCount > 0 && thumbnails.length === 0 && (
+                  <div className="space-y-2">
+                    <span className="text-[9px] text-slate-500">Loading thumbnails...</span>
+                    <div className="grid grid-cols-4 gap-1.5 max-h-32 overflow-y-auto p-1 rounded-lg bg-slate-100 dark:bg-slate-900">
+                      {renderSkeletons()}
                     </div>
                   </div>
                 )}
@@ -193,7 +258,18 @@ export default function CreatorToolsPanel({ jobId, open, onClose }: { jobId: str
                     <div className="grid grid-cols-4 gap-1.5 max-h-32 overflow-y-auto p-1 rounded-lg bg-slate-100 dark:bg-slate-900">
                       {thumbnails.map((url, i) => (
                         <a key={i} href={apiUrl(url)} target="_blank" rel="noopener noreferrer" className="block">
-                          <img src={apiUrl(url)} alt={`Thumb ${i+1}`} className="w-full aspect-video object-cover rounded border border-slate-300 dark:border-slate-700 hover:opacity-80 transition-opacity" loading="lazy" />
+                          <img
+                            src={apiUrl(url)}
+                            alt={`Thumb ${i + 1}`}
+                            className="w-full aspect-video object-cover rounded border border-slate-300 dark:border-slate-700 hover:opacity-80 transition-opacity"
+                            loading="lazy"
+                            onLoad={() => setThumbImageLoadedCount(prev => prev + 1)}
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+                              (e.target as HTMLImageElement).classList.add("opacity-30");
+                              setThumbImageLoadedCount(prev => prev + 1);
+                            }}
+                          />
                         </a>
                       ))}
                     </div>
