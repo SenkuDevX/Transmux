@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useCallback, useMemo, type MouseEvent as ReactMouseEvent } from "react";
-import { Scissors, Play, Image } from "lucide-react";
+import { Scissors, Play } from "lucide-react";
 
 interface SubtitleCue { time: number; text: string }
 interface Chapter { start: number; title: string }
@@ -46,10 +46,10 @@ export default function WaveformEditor({ duration, trimStart, trimEnd, onTrimCha
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const thumbContainerRef = useRef<HTMLDivElement>(null);
-  const [dragType, setDragType] = useState<"start" | "end" | null>(null);
+  const dragRef = useRef<"start" | "end" | null>(null);
   const [hoverTime, setHoverTime] = useState<number | null>(null);
   const [thumbLoaded, setThumbLoaded] = useState<Set<number>>(new Set());
-  const localPeaks = externalPeaks || generateSyntheticPeaks(duration, 200);
+  const localPeaks = useMemo(() => externalPeaks || generateSyntheticPeaks(duration, 200), [externalPeaks, duration]);
   const startSec = Math.max(0, timeToSeconds(trimStart));
   const endSec = trimEnd ? Math.min(duration, timeToSeconds(trimEnd)) : duration;
 
@@ -63,14 +63,15 @@ export default function WaveformEditor({ duration, trimStart, trimEnd, onTrimCha
 
   const handleMouseDown = useCallback((e: ReactMouseEvent, type: "start" | "end") => {
     e.preventDefault();
-    setDragType(type);
+    dragRef.current = type;
   }, []);
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (dragType) {
+    const dt = dragRef.current;
+    if (dt) {
       const t = getTimeFromX(e.clientX);
       const clamped = Math.max(0, Math.min(duration, Math.round(t)));
-      if (dragType === "start") {
+      if (dt === "start") {
         const newEnd = endSec > clamped ? endSec : clamped + 1;
         onTrimChange(secondsToTime(clamped), secondsToTime(newEnd));
       } else {
@@ -80,10 +81,10 @@ export default function WaveformEditor({ duration, trimStart, trimEnd, onTrimCha
     } else {
       setHoverTime(getTimeFromX(e.clientX));
     }
-  }, [dragType, duration, startSec, endSec, getTimeFromX, onTrimChange]);
+  }, [duration, startSec, endSec, getTimeFromX, onTrimChange]);
 
   const handleMouseUp = useCallback(() => {
-    setDragType(null);
+    dragRef.current = null;
   }, []);
 
   const handleMouseLeave = useCallback(() => {
@@ -98,6 +99,16 @@ export default function WaveformEditor({ duration, trimStart, trimEnd, onTrimCha
       window.removeEventListener("mouseup", handleMouseUp);
     };
   }, [handleMouseMove, handleMouseUp]);
+
+  // Force re-draw on container resize
+  const [resizeTick, setResizeTick] = useState(0);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setResizeTick(t => t + 1));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -209,7 +220,7 @@ export default function WaveformEditor({ duration, trimStart, trimEnd, onTrimCha
       const x = (t / duration) * w;
       ctx.fillText(secondsToTime(t).slice(3), x, h - 3);
     }
-  }, [localPeaks, duration, startSec, endSec, subtitles, chapters, hoverTime]);
+  }, [localPeaks, duration, startSec, endSec, subtitles, chapters, hoverTime, resizeTick]);
 
   return (
     <div className="space-y-2">
